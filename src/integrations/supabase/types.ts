@@ -570,6 +570,33 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_live_candidates: {
+        Args: { _limit?: number }
+        Returns: {
+          avatar_url: string
+          bio: string
+          display_name: string
+          game_mode: string
+          games_planned: number
+          languages: string[]
+          live_since: string
+          losses: number
+          note: string
+          playstyle: string
+          primary_role: string
+          rank_division: string
+          rank_tier: string
+          reasons: string[]
+          region: string
+          riot_id: string
+          score: number
+          secondary_role: string
+          status: string
+          user_id: string
+          voice: string
+          wins: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -580,6 +607,77 @@ export type Database = {
       is_conversation_member: {
         Args: { _conversation_id: string; _user_id: string }
         Returns: boolean
+      }
+      live_heartbeat: { Args: { _status?: string }; Returns: undefined }
+      live_player_count: { Args: never; Returns: number }
+      my_conversations: {
+        Args: never
+        Returns: {
+          conversation_id: string
+          last_message: string
+          last_message_at: string
+          match_id: string
+          match_score: number
+          match_status: string
+          other_avatar: string
+          other_last_seen: string
+          other_name: string
+          other_status: string
+          other_user: string
+          unread: number
+        }[]
+      }
+      rank_value: {
+        Args: { _division?: string; _tier: string }
+        Returns: number
+      }
+      roles_complementary: {
+        Args: { _a: string; _b: string }
+        Returns: boolean
+      }
+      start_live_session: {
+        Args: {
+          _game_mode: string
+          _games_planned: number
+          _languages: string[]
+          _note?: string
+          _playstyle: string
+          _primary_role: string
+          _rank_range: string
+          _region: string
+          _secondary_role: string
+          _voice: string
+        }
+        Returns: {
+          ended_at: string | null
+          game_mode: string
+          games_planned: number
+          id: string
+          languages: string[]
+          last_seen_at: string
+          note: string | null
+          playstyle: string
+          primary_role: string
+          rank_range: string
+          rank_snapshot: string | null
+          region: string
+          secondary_role: string
+          started_at: string
+          status: string
+          user_id: string
+          voice: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "live_sessions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      stop_live_session: { Args: never; Returns: undefined }
+      swipe: {
+        Args: { _action: string; _score?: number; _target: string }
+        Returns: Json
       }
     }
     Enums: {
