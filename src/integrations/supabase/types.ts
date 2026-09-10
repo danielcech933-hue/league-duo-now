@@ -339,7 +339,9 @@ export type Database = {
         Row: {
           avatar_url: string | null
           bio: string | null
+          country: string | null
           created_at: string
+          date_of_birth: string | null
           display_name: string
           id: string
           is_banned: boolean
@@ -357,7 +359,9 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           bio?: string | null
+          country?: string | null
           created_at?: string
+          date_of_birth?: string | null
           display_name?: string
           id: string
           is_banned?: boolean
@@ -375,7 +379,9 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           bio?: string | null
+          country?: string | null
           created_at?: string
+          date_of_birth?: string | null
           display_name?: string
           id?: string
           is_banned?: boolean
