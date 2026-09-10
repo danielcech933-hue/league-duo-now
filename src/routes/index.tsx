@@ -22,7 +22,7 @@ function LeagueMateApp(){
  const stop=async()=>{await supabase.rpc("stop_live_session");setLooking(false);await refresh()};
  const swipe=async(action:"like"|"pass"|"super_like")=>{const p=candidates[index];if(!p)return;const {data,error}=await supabase.rpc("swipe",{_target:p.user_id,_action:action,_score:p.score});if(!error&&(data as any)?.matched)setMatch({name:p.display_name,conversationId:(data as any).conversation_id});setIndex(v=>v+1);setTimeout(refresh,300)};
  if(loading)return <Splash/>;
- if(!session)return <Landing onAuth={async(mode)=>{const email=prompt(mode==="signup"?"Email":"Email");if(!email)return;const password=prompt("Password");if(!password)return;const r=mode==="signup"?await supabase.auth.signUp({email,password,options:{data:{display_name:"Summoner"}}}):await supabase.auth.signInWithPassword({email,password});if(r.error)alert(r.error.message)}}/>;
+ if(!session)return <LandingWithAuth/>;
  if(profile&&!profile.onboarded)return <OnboardingView profile={profile} onComplete={()=>loadProfile(profile.id)}/>;
  return <Shell profile={profile} view={view} setView={setView} looking={looking} count={count} onPlay={start} onStop={stop} onLogout={()=>supabase.auth.signOut()}>
   {view==="home"&&<Dashboard profile={profile} count={count} looking={looking} onPlay={start} onLive={()=>setView("live")}/>} 
