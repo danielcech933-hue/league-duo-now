@@ -38,10 +38,19 @@ function Splash(){return <div className="grid min-h-screen place-items-center bg
 function Landing({onAuth}:{onAuth:(m:"signin"|"signup")=>void}){return <div className="min-h-screen bg-[#070a12] text-white"><header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6"><Brand/><button onClick={()=>onAuth("signin")} className="rounded-xl border border-white/10 px-4 py-2 text-sm font-bold">Sign in</button></header><main className="mx-auto max-w-5xl px-6 pb-20 pt-20 text-center"><div className="mx-auto inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-bold text-emerald-300"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400"/> LIVE MATCHMAKING</div><h1 className="mt-7 text-5xl font-black tracking-tight sm:text-7xl">Your next duo is<br/><span className="bg-gradient-to-r from-violet-400 to-cyan-300 bg-clip-text text-transparent">online right now.</span></h1><p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-500">Find compatible League players based on role, rank, language, voice and playstyle — then match and chat instantly.</p><button onClick={()=>onAuth("signup")} className="mt-9 rounded-2xl bg-white px-7 py-4 font-black text-slate-950">Find players now <ArrowRight className="ml-2 inline" size={18}/></button><div className="mx-auto mt-16 grid max-w-3xl gap-4 sm:grid-cols-3"><Feature icon={<Zap/>} title="Go LIVE" text="Join the realtime queue."/><Feature icon={<Heart/>} title="Match" text="Compatibility-first candidates."/><Feature icon={<MessageCircle/>} title="Play" text="Private chat after a mutual like."/></div></main></div>}
 function LandingWithAuth(){const [modal,setModal]=useState<"signin"|"signup"|null>(null);return <><Landing onAuth={setModal}/>{modal&&<AuthModal initialMode={modal} onClose={()=>setModal(null)}/>}</>}
 function AuthModal({initialMode,onClose}:{initialMode:"signin"|"signup";onClose:()=>void}){
- const [mode,setMode]=useState<"signin"|"signup">(initialMode);const [email,setEmail]=useState("");const [password,setPassword]=useState("");const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [notice,setNotice]=useState("");
+ const [mode,setMode]=useState<"signin"|"signup">(initialMode);const [email,setEmail]=useState("");const [password,setPassword]=useState("");const [dob,setDob]=useState("");const [country,setCountry]=useState("");const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [notice,setNotice]=useState("");
  useEffect(()=>{const h=(e:KeyboardEvent)=>{if(e.key==="Escape")onClose()};window.addEventListener("keydown",h);return()=>window.removeEventListener("keydown",h)},[onClose]);
- const submit=async(e:any)=>{e.preventDefault();if(busy)return;setBusy(true);setError("");setNotice("");
-  const r=mode==="signup"?await supabase.auth.signUp({email,password,options:{data:{display_name:"Summoner"},emailRedirectTo:window.location.origin}}):await supabase.auth.signInWithPassword({email,password});
+ const submit=async(e:any)=>{e.preventDefault();if(busy)return;setError("");setNotice("");
+  if(mode==="signup"){
+   const age=ageFromDob(dob);
+   if(!dob||age===null){setError("Please enter a valid date of birth.");return}
+   if(new Date(dob)>new Date()){setError("Date of birth cannot be in the future.");return}
+   if(age<13){setError("You must be at least 13 years old to use LeagueMate.");return}
+   if(age>120){setError("Please enter a valid date of birth.");return}
+   if(!country){setError("Please select your country.");return}
+  }
+  setBusy(true);
+  const r=mode==="signup"?await supabase.auth.signUp({email,password,options:{data:{display_name:"Summoner",date_of_birth:dob,country},emailRedirectTo:window.location.origin}}):await supabase.auth.signInWithPassword({email,password});
   setBusy(false);if(r.error){setError(r.error.message);return}
   if(mode==="signup"&&!r.data.session)setNotice("Check your email to confirm your account, then sign in.");};
  const forgot=async()=>{if(!email){setError("Enter your email first.");return}setBusy(true);setError("");const {error:e}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:`${window.location.origin}/reset-password`});setBusy(false);if(e)setError(e.message);else setNotice("Password reset email sent. Check your inbox.")};
