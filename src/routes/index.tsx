@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ArrowRight, Heart, Home, LogOut, MessageCircle, Settings, Swords, User, Users, Zap } from "lucide-react";
+import { ArrowRight, Heart, Home, LogOut, MessageCircle, Settings, Swords, User, Users, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { OnboardingView, MatchesView, MessagesView, SettingsView } from "@/components/LeagueMateViews";
 
