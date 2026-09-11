@@ -36,13 +36,29 @@ export function PlayerOrbitalSpace({ players, onSelect, onRefresh, refreshing = 
   const [hovered, setHovered] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [rotation, setRotation] = useState(0);
-  const visible = useMemo(() => players.slice(0, 10), [players]);
+  const [offset, setOffset] = useState(0);
+
+  useEffect(() => {
+    setOffset((value) => (players.length ? value % players.length : 0));
+  }, [players.length]);
+
+  const visible = useMemo(() => {
+    if (players.length <= 10) return players.slice(0, 10);
+    return Array.from({ length: 10 }, (_, i) => players[(offset + i) % players.length]);
+  }, [players, offset]);
 
   useEffect(() => {
     if (paused || hovered) return;
     const timer = window.setInterval(() => setRotation((value) => (value + 0.7) % 360), 80);
     return () => window.clearInterval(timer);
   }, [paused, hovered]);
+
+  const handleRefresh = () => {
+    if (players.length > 10) {
+      setOffset((value) => (value + 10) % players.length);
+    }
+    onRefresh?.();
+  };
 
   return <section className="overflow-hidden rounded-[30px] border border-white/[.07] bg-gradient-to-br from-white/[.035] to-violet-500/[.035] p-4 sm:p-6">
     <div className="flex items-end justify-between gap-4 px-1">
@@ -53,7 +69,7 @@ export function PlayerOrbitalSpace({ players, onSelect, onRefresh, refreshing = 
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <span className="rounded-full border border-white/[.08] bg-black/20 px-3 py-1.5 text-[10px] font-black text-slate-500">{visible.length}/10</span>
-        {onRefresh && <button type="button" onClick={onRefresh} disabled={refreshing} className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 text-slate-500 transition hover:bg-white/[.05] hover:text-white disabled:opacity-40" aria-label="Refresh players" title="Refresh players"><RefreshCw size={14} className={refreshing ? "animate-spin" : ""}/></button>}
+        {onRefresh && <button type="button" onClick={handleRefresh} disabled={refreshing} className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 text-slate-500 transition hover:bg-white/[.05] hover:text-white disabled:opacity-40" aria-label="Refresh players" title="Refresh players"><RefreshCw size={14} className={refreshing ? "animate-spin" : ""}/></button>}
       </div>
     </div>
 
@@ -107,7 +123,7 @@ export function PlayerOrbitalSpace({ players, onSelect, onRefresh, refreshing = 
         <div className="text-center"><Swords className="mx-auto" size={22}/><div className="mt-1 text-[9px] font-black uppercase tracking-widest">YOU</div><div className="mt-1 text-[8px] text-slate-500">best matches</div></div>
       </div>
 
-      {visible.length === 0 && <div className="absolute inset-0 grid place-items-center p-8 text-center"><div><div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-violet-500/10 text-violet-300"><Swords size={20}/></div><h3 className="mt-4 font-black">No live players yet</h3><p className="mt-1 max-w-sm text-xs leading-5 text-slate-600">As players enter the live queue, up to ten of the best compatible profiles appear here.</p>{onRefresh&&<button type="button" onClick={onRefresh} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-black text-slate-950"><RefreshCw size={13}/> Refresh</button>}</div></div>}
+      {visible.length === 0 && <div className="absolute inset-0 grid place-items-center p-8 text-center"><div><div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-violet-500/10 text-violet-300"><Swords size={20}/></div><h3 className="mt-4 font-black">No live players yet</h3><p className="mt-1 max-w-sm text-xs leading-5 text-slate-600">As players enter the live queue, up to ten of the best compatible profiles appear here.</p>{onRefresh&&<button type="button" onClick={handleRefresh} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-black text-slate-950"><RefreshCw size={13}/> Refresh</button>}</div></div>}
     </div>
   </section>;
 }
