@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Clock3, MapPin, Mic2, RefreshCw, Swords } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { ageFromDob, getCountry } from "@/lib/countries";
 
 type Player = {
@@ -36,16 +37,31 @@ export function PlayerOrbitalSpace({ players, onSelect, onRefresh, refreshing = 
   const [hovered, setHovered] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [rotation, setRotation] = useState(0);
-  const [offset, setOffset] = useState(0);
+  const [pool, setPool] = useState<Player[]>(players);
+  const [seenIds, setSeenIds] = useState<Set<string>>(new Set(players.map((p) => p.user_id)));
+  const [visibleIds, setVisibleIds] = useState<string[]>(players.slice(0, 10).map((p) => p.user_id));
+  const [loadingPool, setLoadingPool] = useState(false);
 
   useEffect(() => {
-    setOffset((value) => (players.length ? value % players.length : 0));
-  }, [players.length]);
+    setPool((current) => {
+      if (!current.length) return players;
+      const known = new Set(current.map((p) => p.user_id));
+      const additions = players.filter((p) => !known.has(p.user_id));
+      return additions.length ? [...current, ...additions] : current;
+    });
+  }, [players]);
 
   const visible = useMemo(() => {
-    if (players.length <= 10) return players.slice(0, 10);
-    return Array.from({ length: 10 }, (_, i) => players[(offset + i) % players.length]);
-  }, [players, offset]);
+    const source = pool.length ? pool : players;
+    if (!visibleIds.length) return source.slice(0, 10);
+    const byId = new Map(source.map((p) => [p.user_id, p]));
+    const picked = visibleIds.map((id) => byId.get(id)).filter(Boolean) as Player[];
+    return picked.length ? picked.slice(0, 10) : source.slice(0, 10);
+  }, [pool, players, visibleIds]);
+
+  useEffect(() => {
+    if (visible.length) setVisibleIds(visible.map((p) => p.user_id));
+  }, [visible]);
 
   useEffect(() => {
     if (paused || hovered) return;
@@ -53,9 +69,44 @@ export function PlayerOrbitalSpace({ players, onSelect, onRefresh, refreshing = 
     return () => window.clearInterval(timer);
   }, [paused, hovered]);
 
-  const handleRefresh = () => {
-    if (players.length > 10) {
-      setOffset((value) => (value + 10) % players.length);
+  const loadLargePool = async () => {
+    setLoadingPool(true);
+    try {
+      const { data } = await supabase.rpc("get_live_candidates", { _limit: 1000 });
+      const fresh = ((data as Player[] | null) || []).filter((p) => p?.user_id);
+      if (fresh.length) {
+        setPool(fresh);
+        return fresh;
+      }
+      return pool;
+    } finally {
+      setLoadingPool(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    const freshPool = await loadLargePool();
+    const available = freshPool.filter((p) => !seenIds.has(p.user_id));
+    let next: Player[];
+
+    if (available.length >= 10) {
+      next = available.slice(0, 10);
+    } else if (freshPool.length) {
+      const resetSeen = new Set<string>();
+      next = freshPool.slice(0, Math.min(10, freshPool.length));
+      next.forEach((p) => resetSeen.add(p.user_id));
+      setSeenIds(resetSeen);
+    } else {
+      next = players.slice(0, 10);
+    }
+
+    if (next.length) {
+      setVisibleIds(next.map((p) => p.user_id));
+      setSeenIds((current) => {
+        const merged = new Set(current);
+        next.forEach((p) => merged.add(p.user_id));
+        return merged;
+      });
     }
     onRefresh?.();
   };
@@ -69,7 +120,7 @@ export function PlayerOrbitalSpace({ players, onSelect, onRefresh, refreshing = 
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <span className="rounded-full border border-white/[.08] bg-black/20 px-3 py-1.5 text-[10px] font-black text-slate-500">{visible.length}/10</span>
-        {onRefresh && <button type="button" onClick={handleRefresh} disabled={refreshing} className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 text-slate-500 transition hover:bg-white/[.05] hover:text-white disabled:opacity-40" aria-label="Refresh players" title="Refresh players"><RefreshCw size={14} className={refreshing ? "animate-spin" : ""}/></button>}
+        {onRefresh && <button type="button" onClick={() => void handleRefresh()} disabled={refreshing || loadingPool} className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 text-slate-500 transition hover:bg-white/[.05] hover:text-white disabled:opacity-40" aria-label="Refresh players" title="Refresh players"><RefreshCw size={14} className={refreshing || loadingPool ? "animate-spin" : ""}/></button>}
       </div>
     </div>
 
@@ -123,7 +174,7 @@ export function PlayerOrbitalSpace({ players, onSelect, onRefresh, refreshing = 
         <div className="text-center"><Swords className="mx-auto" size={22}/><div className="mt-1 text-[9px] font-black uppercase tracking-widest">YOU</div><div className="mt-1 text-[8px] text-slate-500">best matches</div></div>
       </div>
 
-      {visible.length === 0 && <div className="absolute inset-0 grid place-items-center p-8 text-center"><div><div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-violet-500/10 text-violet-300"><Swords size={20}/></div><h3 className="mt-4 font-black">No live players yet</h3><p className="mt-1 max-w-sm text-xs leading-5 text-slate-600">As players enter the live queue, up to ten of the best compatible profiles appear here.</p>{onRefresh&&<button type="button" onClick={handleRefresh} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-black text-slate-950"><RefreshCw size={13}/> Refresh</button>}</div></div>}
+      {visible.length === 0 && <div className="absolute inset-0 grid place-items-center p-8 text-center"><div><div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-violet-500/10 text-violet-300"><Swords size={20}/></div><h3 className="mt-4 font-black">No live players yet</h3><p className="mt-1 max-w-sm text-xs leading-5 text-slate-600">As players enter the live queue, up to ten of the best compatible profiles appear here.</p>{onRefresh&&<button type="button" onClick={() => void handleRefresh()} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-black text-slate-950"><RefreshCw size={13}/> Refresh</button>}</div></div>}
     </div>
   </section>;
 }
