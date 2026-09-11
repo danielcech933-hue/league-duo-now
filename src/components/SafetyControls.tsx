@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Ban, Flag, ShieldAlert, X } from "lucide-react";
+import { Ban, Flag, ShieldAlert, UserRound, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { PlayerProfileModal } from "@/components/PlayerProfileModal";
 
 export const REPORT_REASONS: [string, string][] = [
   ["toxic", "Toxic behaviour"],
@@ -169,7 +170,7 @@ export function ReportModal({ userId, name, onClose, onDone }: { userId: string;
   );
 }
 
-/** Inline Block + Report buttons plus their modals. */
+/** Profile + Block + Report controls. */
 export function SafetyControls({
   userId,
   name,
@@ -183,13 +184,16 @@ export function SafetyControls({
   onToast: (msg: string, tone: "success" | "error") => void;
   compact?: boolean;
 }) {
-  const [open, setOpen] = useState<"block" | "report" | null>(null);
+  const [open, setOpen] = useState<"profile" | "block" | "report" | null>(null);
   const base = compact
     ? "inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] font-bold"
     : "inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs font-bold";
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={() => setOpen("profile")} aria-label={`Open ${name} profile`} className={`${base} text-violet-300 transition hover:bg-violet-400/10 hover:text-violet-200`}>
+          <UserRound size={compact ? 12 : 14} /> Profile
+        </button>
         <button type="button" onClick={() => setOpen("report")} aria-label={`Report ${name}`} className={`${base} text-slate-400 transition hover:bg-white/[.05] hover:text-amber-200`}>
           <Flag size={compact ? 12 : 14} /> Report
         </button>
@@ -197,6 +201,7 @@ export function SafetyControls({
           <Ban size={compact ? 12 : 14} /> Block
         </button>
       </div>
+      {open === "profile" && <PlayerProfileModal userId={userId} name={name} onClose={() => setOpen(null)} onToast={onToast} />}
       {open === "block" && (
         <BlockModal userId={userId} name={name} onClose={() => setOpen(null)} onDone={(m, t) => { onToast(m, t); if (t === "success") onBlocked?.(); }} />
       )}
