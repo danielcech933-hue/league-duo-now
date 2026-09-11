@@ -201,7 +201,7 @@ export function SafetyControls({
         <BlockModal userId={userId} name={name} onClose={() => setOpen(null)} onDone={(m, t) => { onToast(m, t); if (t === "success") onBlocked?.(); }} />
       )}
       {open === "report" && (
-        <ReportModal userId={userId} name={name} onClose={() => setOpen(null)} onDone={(m, t) => { onToast(m, t); if (t === "success") onBlocked?.(); }} />
+        <ReportModal userId={userId} name={name} onClose={() => setOpen(null)} onDone={(m, t, blocked) => { onToast(m, t); if (t === "success" && blocked) onBlocked?.(); }} />
       )}
     </>
   );
