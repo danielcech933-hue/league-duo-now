@@ -1,29 +1,17 @@
 import { useEffect, useState } from "react";
-import { Award, Check, Gamepad2, Globe2, Heart, MessageCircle, Shield, Star, Swords, UserRound, X } from "lucide-react";
+import { Award, Check, Gamepad2, Globe2, MessageCircle, Shield, Star, Swords, UserRound, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { ageFromDob, getCountry } from "@/lib/countries";
-import { sendConnectionRequest } from "@/components/ConnectionsView";
 
 const roleLabel: Record<string, string> = { TOP: "Top", JUNGLE: "Jungle", MID: "Mid", ADC: "ADC", SUPPORT: "Support", FILL: "Fill" };
 
 type Profile = {
-  id: string;
-  display_name: string;
-  avatar_url?: string | null;
-  bio?: string | null;
-  region?: string | null;
-  languages?: string[] | null;
-  primary_role?: string | null;
-  secondary_role?: string | null;
-  voice?: string | null;
-  playstyle?: string | null;
-  date_of_birth?: string | null;
-  country?: string | null;
+  id: string; display_name: string; avatar_url?: string | null; bio?: string | null; region?: string | null;
+  languages?: string[] | null; primary_role?: string | null; secondary_role?: string | null; voice?: string | null;
+  playstyle?: string | null; date_of_birth?: string | null; country?: string | null;
 };
-
 type Reputation = { rating_count: number; great_count: number; okay_count: number; bad_count: number; great_pct: number; reputation_score: number };
-
-type Props = { userId: string; name?: string; onClose: () => void; onToast?: (message: string, tone: "success" | "error") => void; };
+type Props = { userId: string; name?: string; onClose: () => void; onToast?: (message: string, tone: "success" | "error") => void };
 
 export function PlayerProfileModal({ userId, name, onClose, onToast }: Props) {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -38,11 +26,11 @@ export function PlayerProfileModal({ userId, name, onClose, onToast }: Props) {
     let alive = true;
     const load = async () => {
       setBusy(true);
-      const [{ data: p, error: pe }, { data: r }] = await Promise.all([
+      const [{ data: p, error: pe }, { data: r }, { data: connections }] = await Promise.all([
         supabase.from("profiles").select("id,display_name,avatar_url,bio,region,languages,primary_role,secondary_role,voice,playstyle,date_of_birth,country").eq("id", userId).maybeSingle(),
         supabase.rpc("player_reputation", { _user: userId }),
+        supabase.rpc("my_connections"),
       ]);
-      const { data: connections } = await supabase.rpc("my_connections");
       if (!alive) return;
       if (pe) setError(pe.message);
       setProfile((p as Profile | null) || null);
@@ -60,7 +48,7 @@ export function PlayerProfileModal({ userId, name, onClose, onToast }: Props) {
 
   const add = async () => {
     setConnectionBusy(true);
-    const { error: e } = await sendConnectionRequest(userId);
+    const { error: e } = await supabase.rpc("send_connection_request", { _target: userId });
     setConnectionBusy(false);
     if (e) { onToast?.(e.message, "error"); return; }
     setConnected("pending"); setRequestByMe(true);
@@ -86,31 +74,16 @@ export function PlayerProfileModal({ userId, name, onClose, onToast }: Props) {
             {connected === "accepted" ? <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs font-black text-emerald-300"><Check size={14}/> Connected</span> : connected === "pending" && requestByMe ? <span className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-slate-500">Request sent</span> : <button onClick={add} disabled={connectionBusy || connected === "pending"} className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-50"><UserRound size={14}/> {connectionBusy ? "Adding…" : "Add teammate"}</button>}
           </div>
         </div>
-
         {busy ? <div className="py-12 text-center text-sm text-slate-600">Loading profile…</div> : profile ? <>
           <div className="mt-5 flex items-center gap-2"><h2 className="text-3xl font-black">{profile.display_name || name || "Summoner"}</h2>{connected === "accepted" && <Award size={20} className="text-amber-300"/>}</div>
           <div className="mt-2 flex flex-wrap gap-2 text-sm text-slate-500"><span className="inline-flex items-center gap-1.5"><Swords size={14}/> {roleLabel[profile.primary_role || "FILL"]}{profile.secondary_role && profile.secondary_role !== "FILL" ? ` · ${roleLabel[profile.secondary_role]}` : ""}</span><span>·</span><span>{profile.region || "Unknown region"}</span>{country && <><span>·</span><span>{country.flag} {country.name}</span></>}{age !== null && <><span>·</span><span>{age} years</span></>}</div>
-
           {profile.bio && <p className="mt-5 max-w-xl text-sm leading-7 text-slate-400">{profile.bio}</p>}
-
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <InfoCard icon={<Gamepad2 size={16}/>} label="Playstyle" value={profile.playstyle || "—"}/>
-            <InfoCard icon={<MessageCircle size={16}/>} label="Voice" value={profile.voice === "required" ? "Voice required" : profile.voice === "none" ? "No voice" : "Voice preferred"}/>
-            <InfoCard icon={<Globe2 size={16}/>} label="Languages" value={(profile.languages || []).join(", ") || "—"}/>
-            <InfoCard icon={<Shield size={16}/>} label="Reputation" value={`${repLabel} · ${rep?.rating_count ?? 0} ratings`}/>
-          </div>
-
-          <div className="mt-5 rounded-2xl border border-white/[.06] bg-black/20 p-4">
-            <div className="flex items-center justify-between"><div className="flex items-center gap-2 text-sm font-bold"><Star size={15} className="text-amber-300"/> Teammate reputation</div><span className="text-xs font-black text-slate-400">{rep?.great_pct ?? 0}% great</span></div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-amber-300" style={{ width: `${Math.max(0, Math.min(100, rep?.great_pct ?? 0))}%` }}/></div>
-            <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div><div className="text-emerald-300 font-black">{rep?.great_count ?? 0}</div><div className="text-slate-600">Great</div></div><div><div className="text-slate-300 font-black">{rep?.okay_count ?? 0}</div><div className="text-slate-600">Okay</div></div><div><div className="text-red-300 font-black">{rep?.bad_count ?? 0}</div><div className="text-slate-600">Bad</div></div></div>
-          </div>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2"><InfoCard label="Playstyle" value={profile.playstyle || "—"}/><InfoCard label="Voice" value={profile.voice === "required" ? "Voice required" : profile.voice === "none" ? "No voice" : "Voice preferred"}/><InfoCard label="Languages" value={(profile.languages || []).join(", ") || "—"}/><InfoCard label="Reputation" value={`${repLabel} · ${rep?.rating_count ?? 0} ratings`}/></div>
+          <div className="mt-5 rounded-2xl border border-white/[.06] bg-black/20 p-4"><div className="flex items-center justify-between"><div className="flex items-center gap-2 text-sm font-bold"><Star size={15} className="text-amber-300"/> Teammate reputation</div><span className="text-xs font-black text-slate-400">{rep?.great_pct ?? 0}% great</span></div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-amber-300" style={{ width: `${Math.max(0, Math.min(100, rep?.great_pct ?? 0))}%` }}/></div><div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div><div className="font-black text-emerald-300">{rep?.great_count ?? 0}</div><div className="text-slate-600">Great</div></div><div><div className="font-black text-slate-300">{rep?.okay_count ?? 0}</div><div className="text-slate-600">Okay</div></div><div><div className="font-black text-red-300">{rep?.bad_count ?? 0}</div><div className="text-slate-600">Bad</div></div></div></div>
         </> : <div className="py-12 text-center text-sm text-red-300">{error || "Profile not found."}</div>}
       </div>
     </div>
   </div>;
 }
 
-function InfoCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return <div className="rounded-2xl border border-white/[.06] bg-white/[.025] p-4"><div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-600">{icon}{label}</div><div className="mt-2 text-sm font-bold capitalize text-slate-300">{value}</div></div>;
-}
+function InfoCard({ label, value }: { label: string; value: string }) { return <div className="rounded-2xl border border-white/[.06] bg-white/[.025] p-4"><div className="text-[10px] font-bold uppercase tracking-widest text-slate-600">{label}</div><div className="mt-2 text-sm font-bold capitalize text-slate-300">{value}</div></div>; }
