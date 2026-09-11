@@ -84,6 +84,19 @@ export function PlayerOrbitalSpace({ players, onSelect, onRefresh, refreshing = 
     }
   };
 
+  const enrich = async (items: Player[]) => {
+    if (!items.length) return items;
+    const ids = items.map((p) => p.user_id);
+    const { data } = await supabase.from("profiles").select("id,date_of_birth,country,gender").in("id", ids);
+    const map = new Map((data || []).map((p: any) => [p.id, p]));
+    return items.map((p) => ({
+      ...p,
+      date_of_birth: map.get(p.user_id)?.date_of_birth ?? p.date_of_birth ?? null,
+      country: map.get(p.user_id)?.country ?? p.country ?? null,
+      gender: map.get(p.user_id)?.gender ?? p.gender ?? null,
+    }));
+  };
+
   const handleRefresh = async () => {
     const freshPool = await loadLargePool();
     const available = freshPool.filter((p) => !seenIds.has(p.user_id));
@@ -92,16 +105,21 @@ export function PlayerOrbitalSpace({ players, onSelect, onRefresh, refreshing = 
     if (available.length >= 10) {
       next = available.slice(0, 10);
     } else if (freshPool.length) {
-      const resetSeen = new Set<string>();
       next = freshPool.slice(0, Math.min(10, freshPool.length));
-      next.forEach((p) => resetSeen.add(p.user_id));
-      setSeenIds(resetSeen);
+      setSeenIds(new Set(next.map((p) => p.user_id)));
     } else {
       next = players.slice(0, 10);
     }
 
+    next = await enrich(next);
+
     if (next.length) {
       setVisibleIds(next.map((p) => p.user_id));
+      setPool((current) => {
+        const map = new Map(current.map((p) => [p.user_id, p]));
+        next.forEach((p) => map.set(p.user_id, p));
+        return [...map.values()];
+      });
       setSeenIds((current) => {
         const merged = new Set(current);
         next.forEach((p) => merged.add(p.user_id));
@@ -174,7 +192,7 @@ export function PlayerOrbitalSpace({ players, onSelect, onRefresh, refreshing = 
         <div className="text-center"><Swords className="mx-auto" size={22}/><div className="mt-1 text-[9px] font-black uppercase tracking-widest">YOU</div><div className="mt-1 text-[8px] text-slate-500">best matches</div></div>
       </div>
 
-      {visible.length === 0 && <div className="absolute inset-0 grid place-items-center p-8 text-center"><div><div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-violet-500/10 text-violet-300"><Swords size={20}/></div><h3 className="mt-4 font-black">No live players yet</h3><p className="mt-1 max-w-sm text-xs leading-5 text-slate-600">As players enter the live queue, up to ten of the best compatible profiles appear here.</p>{onRefresh&&<button type="button" onClick={() => void handleRefresh()} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-black text-slate-950"><RefreshCw size={13}/> Refresh</button>}</div></div>}
+      {visible.length === 0 && <div className="absolute inset-0 grid place-items-center p-8 text-center"><div><div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-violet-500/10 text-violet-300"><Swords size={20}/></div><h3 className="mt-4 font-black">No live players yet</h3><p className="mt-1 max-w-sm text-xs leading-5 text-slate-600">As players enter the live queue, up to ten of the best compatible profiles appear here.</p>{onRefresh&&<button type="button" onClick={() => void handleRefresh()} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-black text-slate-950"><RefreshCw size={13}/> Refresh</button></div></div>}
     </div>
   </section>;
 }
