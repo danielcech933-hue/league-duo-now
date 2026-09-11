@@ -12,287 +12,38 @@ import { ageFromDob, getCountry } from "@/lib/countries";
 
 export const Route = createFileRoute("/")({ component: LeagueMateApp });
 
-type Profile = {
-  id: string;
-  display_name: string;
-  avatar_url?: string | null;
-  bio?: string | null;
-  region: string;
-  languages: string[];
-  primary_role: string;
-  secondary_role: string;
-  voice: string;
-  playstyle: string;
-  onboarded: boolean;
-  date_of_birth?: string | null;
-  country?: string | null;
-  gender?: string | null;
-};
+type Profile = { id:string; display_name:string; avatar_url?:string|null; bio?:string|null; region:string; languages:string[]; primary_role:string; secondary_role:string; voice:string; playstyle:string; onboarded:boolean; date_of_birth?:string|null; country?:string|null; gender?:string|null };
+type Candidate = { user_id:string; display_name:string; avatar_url?:string|null; bio?:string|null; region:string; languages:string[]; primary_role:string; secondary_role:string; voice:string; playstyle:string; game_mode:string; rank_tier?:string|null; rank_division?:string|null; riot_id?:string|null; wins?:number|null; losses?:number|null; note?:string|null; games_planned:number; status:string; live_since:string; score:number; reasons:string[]; date_of_birth?:string|null; country?:string|null; gender?:string|null };
+type NotificationItem = { id:string; type:string; title:string; body?:string|null; data?:Record<string,any>|null; read_at?:string|null; created_at:string };
+type View = "home"|"live"|"matches"|"messages"|"connections"|"profile"|"settings";
+const roleLabel:Record<string,string>={TOP:"Top",JUNGLE:"Jungle",MID:"Mid",ADC:"ADC",SUPPORT:"Support",FILL:"Fill"};
+const genderLabel:Record<string,string>={male:"Male",female:"Female",non_binary:"Non-binary",other:"Other",undisclosed:"Private"};
 
-type Candidate = {
-  user_id: string;
-  display_name: string;
-  avatar_url?: string | null;
-  bio?: string | null;
-  region: string;
-  languages: string[];
-  primary_role: string;
-  secondary_role: string;
-  voice: string;
-  playstyle: string;
-  game_mode: string;
-  rank_tier?: string | null;
-  rank_division?: string | null;
-  riot_id?: string | null;
-  wins?: number | null;
-  losses?: number | null;
-  note?: string | null;
-  games_planned: number;
-  status: string;
-  live_since: string;
-  score: number;
-  reasons: string[];
-  date_of_birth?: string | null;
-  country?: string | null;
-  gender?: string | null;
-};
-
-type NotificationItem = {
-  id: string;
-  type: string;
-  title: string;
-  body?: string | null;
-  data?: Record<string, any> | null;
-  read_at?: string | null;
-  created_at: string;
-};
-
-type View = "home" | "live" | "matches" | "messages" | "connections" | "profile" | "settings";
-const roleLabel: Record<string, string> = { TOP: "Top", JUNGLE: "Jungle", MID: "Mid", ADC: "ADC", SUPPORT: "Support", FILL: "Fill" };
-const genderLabel: Record<string, string> = { male: "Male", female: "Female", non_binary: "Non-binary", other: "Other", undisclosed: "Private" };
-
-function LeagueMateApp() {
-  const [session, setSession] = useState<any>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<View>("home");
-  const [looking, setLooking] = useState(false);
-  const [count, setCount] = useState(0);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [index, setIndex] = useState(0);
-  const [match, setMatch] = useState<{ name: string; conversationId: string } | null>(null);
-  const [matchNotice, setMatchNotice] = useState<string | null>(null);
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
-  const [toast, setToast] = useState<{ tone: "success" | "error"; message: string } | null>(null);
-  const showToast = (message: string, tone: "success" | "error") => setToast({ message, tone });
-
-  const loadProfile = async (id: string) => {
-    const { data } = await supabase.from("profiles").select("*").eq("id", id).maybeSingle();
-    setProfile(data as Profile | null);
-  };
-
-  const loadUnreadNotifications = async () => {
-    const { count: unread } = await supabase.from("notifications").select("id", { count: "exact", head: true }).is("read_at", null);
-    setUnreadNotifications(unread ?? 0);
-  };
-
-  const refresh = async () => {
-    if (!session) return;
-    const [{ data: rawCandidates }, { data: c }] = await Promise.all([
-      supabase.rpc("get_live_candidates", { _limit: 20 }),
-      supabase.rpc("live_player_count"),
-    ]);
-    let nextCandidates = ((rawCandidates as Candidate[] | null) || []);
-    if (nextCandidates.length) {
-      const ids = nextCandidates.map((p) => p.user_id);
-      const { data: details } = await supabase.from("profiles").select("id,date_of_birth,country,gender").in("id", ids);
-      const byId = new Map((details || []).map((p: any) => [p.id, p]));
-      nextCandidates = nextCandidates.map((p) => ({
-        ...p,
-        date_of_birth: byId.get(p.user_id)?.date_of_birth ?? null,
-        country: byId.get(p.user_id)?.country ?? null,
-        gender: byId.get(p.user_id)?.gender ?? null,
-      }));
-    }
-    setCandidates(nextCandidates);
-    setCount(typeof c === "number" ? c : 0);
-    setIndex((current) => Math.min(current, Math.max(nextCandidates.length - 1, 0)));
-  };
-
-  useEffect(() => {
-    let mounted = true;
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (!mounted) return;
-      setSession(data.session);
-      if (data.session) {
-        await loadProfile(data.session.user.id);
-        await loadUnreadNotifications();
-      }
-      setLoading(false);
-    });
-    const { data } = supabase.auth.onAuthStateChange(async (_, next) => {
-      setSession(next);
-      if (next) {
-        await loadProfile(next.user.id);
-        await loadUnreadNotifications();
-      } else {
-        setProfile(null);
-        setUnreadNotifications(0);
-      }
-    });
-    return () => { mounted = false; data.subscription.unsubscribe(); };
-  }, []);
-
-  useEffect(() => { if (session) void refresh(); }, [session]);
-
-  useEffect(() => {
-    if (!session) return;
-    const channel = supabase
-      .channel(`leaguemate-live-${session.user.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "live_sessions" }, () => void refresh())
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${session.user.id}` }, (payload) => {
-        const notification = payload.new as any;
-        setUnreadNotifications((v) => v + 1);
-        if (notification?.type === "match") {
-          setMatchNotice(notification.title || "It's a match!");
-          window.setTimeout(() => setMatchNotice(null), 5000);
-          void refresh();
-        }
-      })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "matches" }, () => void refresh())
-      .subscribe();
-    return () => { void supabase.removeChannel(channel); };
-  }, [session]);
-
-  useEffect(() => {
-    if (!session || !looking) return;
-    const timer = window.setInterval(() => { void supabase.rpc("live_heartbeat", { _status: "looking" }); }, 30000);
-    return () => window.clearInterval(timer);
-  }, [session, looking]);
-
-  const start = async () => {
-    if (!session) return;
-    const p = profile;
-    const { error } = await supabase.rpc("start_live_session", {
-      _game_mode: "ranked_solo",
-      _primary_role: p?.primary_role || "FILL",
-      _secondary_role: p?.secondary_role || "FILL",
-      _languages: p?.languages || ["EN"],
-      _voice: p?.voice || "preferred",
-      _playstyle: p?.playstyle || "chill",
-      _region: p?.region || "EUNE",
-      _rank_range: "pm1",
-      _games_planned: 2,
-    });
-    if (error) showToast(error.message, "error");
-    else { setLooking(true); setView("live"); await refresh(); }
-  };
-
-  const stop = async () => {
-    const { error } = await supabase.rpc("stop_live_session");
-    if (error) showToast(error.message, "error");
-    setLooking(false);
-    await refresh();
-  };
-
-  const swipe = async (action: "like" | "pass" | "super_like") => {
-    const p = candidates[index];
-    if (!p) return;
-    const { data, error } = await supabase.rpc("swipe", { _target: p.user_id, _action: action, _score: p.score });
-    if (error) showToast(error.message, "error");
-    if (!error && (data as any)?.matched) {
-      setMatch({ name: p.display_name, conversationId: (data as any).conversation_id });
-      setMatchNotice(`It's a match with ${p.display_name}!`);
-      window.setTimeout(() => setMatchNotice(null), 5000);
-    }
-    setIndex((v) => v + 1);
-    window.setTimeout(() => void refresh(), 300);
-  };
-
-  const navigateFromNotification = (notification: NotificationItem) => {
-    const data = notification.data || {};
-    const conversationId = data.conversation_id || data.conversationId;
-    const name = data.name || data.display_name || "Teammate";
-    if (["match", "message", "new_message", "duo_invite"].includes(notification.type)) {
-      if (conversationId) setMatch({ name, conversationId });
-      setView("messages");
-    } else if (["connection_request", "connection_accepted"].includes(notification.type)) {
-      setView("connections");
-    }
-  };
-
-  const handleBlocked = (userId: string) => {
-    setCandidates((list) => list.filter((c) => c.user_id !== userId));
-    void refresh();
-  };
-
-  if (loading) return <Splash />;
-  if (!session) return <LandingWithAuth />;
-  if (profile && !profile.onboarded) return <OnboardingView profile={profile} onComplete={() => loadProfile(profile.id)} />;
-
-  return <Shell
-    profile={profile}
-    view={view}
-    setView={setView}
-    looking={looking}
-    count={count}
-    unreadNotifications={unreadNotifications}
-    onUnreadChange={setUnreadNotifications}
-    onPlay={start}
-    onStop={stop}
-    onLogout={() => void supabase.auth.signOut()}
-    onNotificationNavigate={navigateFromNotification}
-    onToast={showToast}
-  >
-    {view === "home" && <Dashboard profile={profile} count={count} looking={looking} candidates={candidates} onPlay={start} onLive={() => setView("live")} />}
-    {view === "live" && <Live candidates={candidates} index={index} count={count} looking={looking} onPlay={start} onStop={stop} onRefresh={refresh} onSwipe={swipe} onToast={showToast} onBlocked={handleBlocked} />}
-    {view === "matches" && <MatchesView onOpenChat={(id, name) => { setMatch({ name, conversationId: id }); setView("messages"); }} onToast={showToast} />}
-    {view === "messages" && <MessagesView initialConversationId={match?.conversationId} initialName={match?.name} onToast={showToast} />}
-    {view === "connections" && <ConnectionsView onOpenChat={(id, name) => { setMatch({ name, conversationId: id }); setView("messages"); }} onToast={showToast} />}
-    {view === "profile" && <ProfileEditor profile={profile} onSaved={() => loadProfile(profile.id)} />}
-    {view === "settings" && <SettingsView profile={profile} onSaved={() => loadProfile(profile.id)} />}
-    {matchNotice && <MatchToast message={matchNotice} onOpen={() => { if (match) setView("messages"); setMatchNotice(null); }} />}
-    {toast && <Toast tone={toast.tone} message={toast.message} onClose={() => setToast(null)} />}
-  </Shell>;
+function LeagueMateApp(){
+ const [session,setSession]=useState<any>(null);const [profile,setProfile]=useState<Profile|null>(null);const [loading,setLoading]=useState(true);const [view,setView]=useState<View>("home");const [looking,setLooking]=useState(false);const [count,setCount]=useState(0);const [candidates,setCandidates]=useState<Candidate[]>([]);const [index,setIndex]=useState(0);const [match,setMatch]=useState<{name:string;conversationId:string}|null>(null);const [matchNotice,setMatchNotice]=useState<string|null>(null);const [unreadNotifications,setUnreadNotifications]=useState(0);const [toast,setToast]=useState<{tone:"success"|"error";message:string}|null>(null);const showToast=(message:string,tone:"success"|"error")=>setToast({message,tone});
+ const loadProfile=async(id:string)=>{const {data}=await supabase.from("profiles").select("*").eq("id",id).maybeSingle();setProfile(data as Profile|null)};
+ const loadUnread=async()=>{const {count:n}=await supabase.from("notifications").select("id",{count:"exact",head:true}).is("read_at",null);setUnreadNotifications(n??0)};
+ const refresh=async()=>{if(!session)return;const [{data:raw},{data:c}]=await Promise.all([supabase.rpc("get_live_candidates",{_limit:20}),supabase.rpc("live_player_count")]);let next=((raw as Candidate[]|null)||[]);if(next.length){const ids=next.map(p=>p.user_id);const {data:details}=await supabase.from("profiles").select("id,date_of_birth,country,gender").in("id",ids);const map=new Map((details||[]).map((p:any)=>[p.id,p]));next=next.map(p=>({...p,date_of_birth:map.get(p.user_id)?.date_of_birth??null,country:map.get(p.user_id)?.country??null,gender:map.get(p.user_id)?.gender??null}))}setCandidates(next);setCount(typeof c==="number"?c:0);setIndex(v=>Math.min(v,Math.max(next.length-1,0)))};
+ useEffect(()=>{let mounted=true;supabase.auth.getSession().then(async({data})=>{if(!mounted)return;setSession(data.session);if(data.session){await loadProfile(data.session.user.id);await loadUnread()}setLoading(false)});const {data}=supabase.auth.onAuthStateChange(async(_,next)=>{setSession(next);if(next){await loadProfile(next.user.id);await loadUnread()}else{setProfile(null);setUnreadNotifications(0)}});return()=>{mounted=false;data.subscription.unsubscribe()}},[]);
+ useEffect(()=>{if(session)void refresh()},[session]);
+ useEffect(()=>{if(!session)return;const ch=supabase.channel(`leaguemate-${session.user.id}`).on("postgres_changes",{event:"*",schema:"public",table:"live_sessions"},()=>void refresh()).on("postgres_changes",{event:"INSERT",schema:"public",table:"notifications",filter:`user_id=eq.${session.user.id}`},p=>{setUnreadNotifications(v=>v+1);if((p.new as any)?.type==="match"){setMatchNotice((p.new as any).title||"It's a match!");window.setTimeout(()=>setMatchNotice(null),5000)}}).on("postgres_changes",{event:"INSERT",schema:"public",table:"matches"},()=>void refresh()).subscribe();return()=>{void supabase.removeChannel(ch)}},[session]);
+ useEffect(()=>{if(!session||!looking)return;const h=window.setInterval(()=>{void supabase.rpc("live_heartbeat",{_status:"looking"})},30000);return()=>window.clearInterval(h)},[session,looking]);
+ const start=async()=>{if(!session)return;const p=profile;const {error}=await supabase.rpc("start_live_session",{_game_mode:"ranked_solo",_primary_role:p?.primary_role||"FILL",_secondary_role:p?.secondary_role||"FILL",_languages:p?.languages||["EN"],_voice:p?.voice||"preferred",_playstyle:p?.playstyle||"chill",_region:p?.region||"EUNE",_rank_range:"pm1",_games_planned:2});if(error)showToast(error.message,"error");else{setLooking(true);setView("live");await refresh()}};
+ const stop=async()=>{const {error}=await supabase.rpc("stop_live_session");if(error)showToast(error.message,"error");setLooking(false);await refresh()};
+ const swipe=async(a:"like"|"pass"|"super_like")=>{const p=candidates[index];if(!p)return;const {data,error}=await supabase.rpc("swipe",{_target:p.user_id,_action:a,_score:p.score});if(error)showToast(error.message,"error");if(!error&&(data as any)?.matched){setMatch({name:p.display_name,conversationId:(data as any).conversation_id});setMatchNotice(`It's a match with ${p.display_name}!`);window.setTimeout(()=>setMatchNotice(null),5000)}setIndex(v=>v+1);window.setTimeout(()=>void refresh(),300)};
+ const handleBlocked=(id:string)=>{setCandidates(v=>v.filter(c=>c.user_id!==id));void refresh()};
+ const navigateFromNotification=(n:NotificationItem)=>{const d=n.data||{};const conversationId=d.conversation_id||d.conversationId;const name=d.name||d.display_name||"Teammate";if(["match","message","new_message","duo_invite"].includes(n.type)){if(conversationId)setMatch({name,conversationId});setView("messages")}else if(["connection_request","connection_accepted"].includes(n.type))setView("connections")};
+ if(loading)return <Splash/>;if(!session)return <LandingWithAuth/>;if(profile&&!profile.onboarded)return <OnboardingView profile={profile} onComplete={()=>loadProfile(profile.id)}/>;
+ return <Shell profile={profile} view={view} setView={setView} looking={looking} count={count} unreadNotifications={unreadNotifications} onUnreadChange={setUnreadNotifications} onPlay={start} onStop={stop} onLogout={()=>void supabase.auth.signOut()} onNotificationNavigate={navigateFromNotification} onToast={showToast}><>{view==="home"&&<Dashboard profile={profile} count={count} looking={looking} candidates={candidates} onPlay={start} onLive={()=>setView("live")}/>} {view==="live"&&<Live candidates={candidates} index={index} count={count} looking={looking} onPlay={start} onStop={stop} onRefresh={refresh} onSwipe={swipe} onToast={showToast} onBlocked={handleBlocked}/>} {view==="matches"&&<MatchesView onOpenChat={(id,name)=>{setMatch({name,conversationId:id});setView("messages")}} onToast={showToast}/>} {view==="messages"&&<MessagesView initialConversationId={match?.conversationId} initialName={match?.name} onToast={showToast}/>} {view==="connections"&&<ConnectionsView onOpenChat={(id,name)=>{setMatch({name,conversationId:id});setView("messages")}} onToast={showToast}/>} {view==="profile"&&<ProfileEditor profile={profile} onSaved={()=>loadProfile(profile.id)}/>} {view==="settings"&&<SettingsView profile={profile} onSaved={()=>loadProfile(profile.id)}/>} {matchNotice&&<MatchToast message={matchNotice} onOpen={()=>{if(match)setView("messages");setMatchNotice(null)}}/>} {toast&&<Toast tone={toast.tone} message={toast.message} onClose={()=>setToast(null)}/>}</></Shell>;
 }
 
-function Shell({ children, profile, view, setView, looking, count, unreadNotifications, onUnreadChange, onPlay, onStop, onLogout, onNotificationNavigate, onToast }: {
-  children: ReactNode; profile: Profile | null; view: View; setView: (v: View) => void; looking: boolean; count: number; unreadNotifications: number;
-  onUnreadChange: (count: number) => void; onPlay: () => void; onStop: () => void; onLogout: () => void;
-  onNotificationNavigate: (notification: NotificationItem) => void; onToast: (message: string, tone: "success" | "error") => void;
-}) {
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const nav: [View, string, any][] = [["home", "Home", Home], ["live", "Live", Zap], ["matches", "Matches", Heart], ["messages", "Messages", MessageCircle], ["connections", "Teammates", Users], ["profile", "Profile", User]];
-  return <div className="min-h-screen bg-[#070a12] text-white lg:flex">
-    <aside className="hidden w-64 shrink-0 border-r border-white/[.06] bg-[#090c15] p-5 lg:flex lg:flex-col"><Brand/><div className="mt-9 space-y-1">{nav.map(([id,label,I]) => <button key={id} onClick={() => setView(id)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold ${view===id?"bg-violet-500/10 text-violet-300":"text-slate-500 hover:bg-white/[.04] hover:text-white"}`}><I size={18}/>{label}{id === "messages" && unreadNotifications>0 && <span className="ml-auto rounded-full bg-violet-500 px-2 py-0.5 text-[9px] font-black">{unreadNotifications}</span>}</button>)}</div><button onClick={() => setView("settings")} className="mt-auto flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-slate-500"><Settings size={18}/>Settings</button><button onClick={onLogout} className="mt-2 flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-slate-500 hover:text-white"><LogOut size={18}/>Sign out</button></aside>
-    <div className="min-w-0 flex-1"><header className="sticky top-0 z-30 flex items-center justify-between border-b border-white/[.06] bg-[#070a12]/90 px-4 py-3 backdrop-blur-xl sm:px-6"><div className="lg:hidden"><Brand/></div><div className="hidden text-sm text-slate-500 lg:block"><b className="text-white">{count}</b> players looking right now</div><div className="flex items-center gap-2"><div className="relative"><button onClick={() => setNotificationsOpen(v => !v)} aria-label="Notifications" className="relative grid h-9 w-9 place-items-center rounded-xl border border-white/10 text-slate-400 hover:text-white"><Bell size={16}/>{unreadNotifications>0&&<span className="absolute -right-1 -top-1 rounded-full bg-violet-500 px-1 text-[8px] font-black">{unreadNotifications}</span>}</button>{notificationsOpen&&<NotificationCenter onClose={() => setNotificationsOpen(false)} onUnreadChange={onUnreadChange} onNavigate={(n) => { setNotificationsOpen(false); onNotificationNavigate(n); }}/>}</div><button onClick={looking?onStop:onPlay} className={`rounded-xl px-4 py-2 text-sm font-black ${looking?"bg-emerald-400/10 text-emerald-300":"bg-white text-slate-950"}`}>{looking?"● Looking now":"⚡ Play now"}</button></div></header><main className="px-4 pb-24 pt-6 sm:px-6 lg:px-8">{children}</main><nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/[.07] bg-[#090c15]/95 px-2 backdrop-blur-xl lg:hidden"><div className="mx-auto flex max-w-6xl justify-around overflow-x-auto">{nav.map(([id,label,I]) => <button key={id} onClick={() => setView(id)} className={`flex shrink-0 flex-col items-center gap-1 px-2.5 py-2.5 text-[10px] font-bold ${view===id?"text-violet-300":"text-slate-500"}`}><I size={18}/>{label}</button>)}</div></nav></div>
-  </div>;
-}
-
-function Dashboard({ profile, count, looking, candidates, onPlay, onLive }: { profile: Profile | null; count: number; looking: boolean; candidates: Candidate[]; onPlay: () => void; onLive: () => void }) {
-  const country = getCountry(profile?.country); const age = ageFromDob(profile?.date_of_birth);
-  return <Page title={`Welcome, ${profile?.display_name || "Summoner"}`} subtitle={looking ? "You're visible in the live queue." : "Find a teammate who is ready to play now."}>
-    <div className="grid gap-5 xl:grid-cols-[.75fr_1.25fr]">
-      <section className="rounded-[30px] border border-white/[.07] bg-gradient-to-br from-violet-500/[.14] to-cyan-400/[.04] p-7 sm:p-8"><div className="text-xs font-bold uppercase tracking-widest text-emerald-300">Live queue</div><h2 className="mt-4 text-4xl font-black tracking-tight">Your duo is already online.</h2><p className="mt-4 leading-7 text-slate-500">{count} players are looking right now. Your top matches are shown in the space beside this card.</p><button onClick={looking?onLive:onPlay} className="mt-7 rounded-2xl bg-white px-6 py-3.5 font-black text-slate-950">{looking?"Open live queue":"PLAY NOW"}</button><div className="mt-7 flex flex-wrap gap-2"><span className="rounded-full border border-white/[.06] bg-black/20 px-3 py-1.5 text-xs text-slate-400">{age !== null ? `${age} years` : "Age —"}</span>{country&&<span className="rounded-full border border-white/[.06] bg-black/20 px-3 py-1.5 text-xs text-slate-400">{country.flag} {country.name}</span>}</div></section>
-      <PlayerOrbitalSpace players={candidates.slice(0, 10)} />
-    </div>
-  </Page>;
-}
-
-function Live({ candidates, index, count, looking, onPlay, onStop, onRefresh, onSwipe, onToast, onBlocked }: { candidates: Candidate[]; index: number; count: number; looking: boolean; onPlay: () => void; onStop: () => void; onRefresh: () => void; onSwipe: (a: "like"|"pass"|"super_like") => void; onToast: (m: string, t: "success"|"error") => void; onBlocked: (id: string) => void }) {
-  const p = candidates[index]; const country = getCountry(p?.country); const age = ageFromDob(p?.date_of_birth);
-  return <Page title="Find your next teammate" subtitle={`${count} looking now · compatibility-first matchmaking`}><div className="mb-5 flex justify-end gap-2"><button onClick={onRefresh} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-slate-400 hover:text-white">Refresh</button>{looking&&<button onClick={onStop} className="rounded-xl bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-300">Stop looking</button>}</div>{!looking?<div className="mx-auto max-w-xl rounded-3xl border border-white/[.07] bg-white/[.025] p-12 text-center"><Zap className="mx-auto text-violet-300"/><h2 className="mt-4 text-2xl font-black">Start looking now</h2><p className="mt-2 text-sm text-slate-500">Join the realtime queue and see compatible players.</p><button onClick={onPlay} className="mt-6 rounded-2xl bg-white px-6 py-3 font-black text-slate-950">GO LIVE</button></div>:!p?<div className="mx-auto max-w-xl rounded-3xl border border-white/[.07] bg-white/[.025] p-12 text-center"><Users className="mx-auto text-slate-600"/><h2 className="mt-4 text-2xl font-black">No compatible players right now</h2><p className="mt-2 text-sm text-slate-500">Check again in a moment.</p></div>:<div className="mx-auto max-w-2xl"><div className="overflow-hidden rounded-[30px] border border-white/[.08] bg-[#0d111c]"><div className="h-28 bg-gradient-to-br from-violet-500/25 to-cyan-400/10"/><div className="px-6 pb-7"><div className="-mt-10 grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-cyan-400 text-2xl font-black">{p.display_name.slice(0,2).toUpperCase()}</div><h2 className="mt-4 text-3xl font-black">{p.display_name}</h2><div className="mt-1 text-sm text-slate-500">{p.rank_tier||"Unranked"} {p.rank_division||""} · {p.region} · {roleLabel[p.primary_role]}</div><div className="mt-4 flex flex-wrap gap-2">{age!==null&&<span className="rounded-full border border-white/[.06] bg-white/[.03] px-3 py-1.5 text-xs text-slate-300">{age} years</span>}{country&&<span className="rounded-full border border-white/[.06] bg-white/[.03] px-3 py-1.5 text-xs text-slate-300">{country.flag} {country.name}</span>}{p.gender&&<span className="rounded-full border border-white/[.06] bg-white/[.03] px-3 py-1.5 text-xs text-slate-300">{genderLabel[p.gender]||p.gender}</span>}</div><div className="mt-6 rounded-2xl bg-violet-500/[.06] p-4"><div className="flex justify-between text-sm font-bold"><span className="text-violet-300">Compatibility</span><span>{p.score}%</span></div><div className="mt-3 h-1.5 rounded-full bg-white/5"><div className="h-full rounded-full bg-violet-500" style={{width:`${p.score}%`}}/></div></div><div className="mt-5 flex flex-wrap gap-2">{p.reasons?.slice(0,5).map(r=><span key={r} className="rounded-full border border-white/[.06] bg-white/[.03] px-3 py-1.5 text-xs text-slate-400">✓ {r}</span>)}</div>{p.bio&&<p className="mt-5 text-sm leading-6 text-slate-500">{p.bio}</p>}<div className="mt-6 flex items-center justify-between border-t border-white/[.06] pt-5"><span className="text-[11px] font-bold uppercase tracking-widest text-slate-600">Safety</span><SafetyControls userId={p.user_id} name={p.display_name} onToast={onToast} onBlocked={()=>onBlocked(p.user_id)} compact/></div></div></div><div className="mt-5 flex items-center justify-center gap-4"><button onClick={()=>onSwipe("pass")} className="grid h-14 w-14 place-items-center rounded-full border border-white/10 text-slate-400"><span className="text-xl">×</span></button><button onClick={()=>onSwipe("super_like")} className="grid h-11 w-11 place-items-center rounded-full bg-violet-500/10 text-violet-300">★</button><button onClick={()=>onSwipe("like")} className="grid h-16 w-16 place-items-center rounded-full bg-violet-500 shadow-xl"><Heart fill="white"/></button></div></div>}</Page>;
-}
-
-function ProfileEditor({ profile, onSaved }: { profile: Profile | null; onSaved: () => void }) {
-  const [name,setName]=useState(profile?.display_name||""); const [bio,setBio]=useState(profile?.bio||""); const [role,setRole]=useState(profile?.primary_role||"FILL"); const [gender,setGender]=useState(profile?.gender||""); const [country,setCountry]=useState(profile?.country||""); const [saving,setSaving]=useState(false); const countryInfo=getCountry(profile?.country); const age=ageFromDob(profile?.date_of_birth);
-  const save=async()=>{if(!profile)return;setSaving(true);const {error}=await supabase.from("profiles").update({display_name:name,bio,primary_role:role,gender:gender||null,country:country||null}).eq("id",profile.id);setSaving(false);if(error)alert(error.message);else onSaved()};
-  return <Page title="Profile" subtitle="Your public teammate identity."><div className="max-w-2xl rounded-3xl border border-white/[.07] bg-white/[.025] p-6 sm:p-8"><div className="mb-7 grid gap-3 sm:grid-cols-3"><div className="rounded-2xl border border-white/[.06] bg-black/20 p-4"><div className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Age</div><div className="mt-2 text-lg font-black text-white">{age!==null?`${age} years`:"Not set"}</div></div><div className="rounded-2xl border border-white/[.06] bg-black/20 p-4"><div className="text-[10px] font-bold uppercase tracking-widest text-slate-600">From</div><div className="mt-2 text-lg font-black text-white">{countryInfo?`${countryInfo.flag} ${countryInfo.name}`:"Not set"}</div></div><div className="rounded-2xl border border-white/[.06] bg-black/20 p-4"><div className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Gender</div><div className="mt-2 text-lg font-black text-white">{gender?genderLabel[gender]||gender:"Not set"}</div></div></div><label className="mb-5 block"><span className="label">Display name</span><input className="input" value={name} onChange={e=>setName(e.target.value)} /></label><label className="mb-5 block"><span className="label">Country</span><CountrySelect value={country} onChange={setCountry}/></label><label className="mb-5 block"><span className="label">Gender</span><select className="input" value={gender} onChange={e=>setGender(e.target.value)}><option value="">Prefer not to say</option><option value="male">Male</option><option value="female">Female</option><option value="non_binary">Non-binary</option><option value="other">Other</option><option value="undisclosed">Private</option></select></label><label className="mb-5 block"><span className="label">Main role</span><select className="input" value={role} onChange={e=>setRole(e.target.value)}>{Object.entries(roleLabel).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label><label className="mb-5 block"><span className="label">Bio</span><textarea className="input resize-none" rows={5} maxLength={240} value={bio} onChange={e=>setBio(e.target.value)} placeholder="Tell teammates what you're looking for…"/></label><div className="flex justify-end"><button onClick={()=>void save()} disabled={saving} className="rounded-xl bg-white px-5 py-2.5 text-sm font-black text-slate-950">{saving?"Saving…":"Save changes"}</button></div></div></Page>;
-}
-
-function Landing({ onAuth }: { onAuth: (m: "signin" | "signup") => void }) { return <div className="min-h-screen bg-[#070a12] text-white"><header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6"><Brand/><button onClick={()=>onAuth("signin")} className="rounded-xl border border-white/10 px-4 py-2 text-sm font-bold">Sign in</button></header><main className="mx-auto max-w-5xl px-6 pb-20 pt-20 text-center"><div className="mx-auto inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-bold text-emerald-300"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400"/> LIVE MATCHMAKING</div><h1 className="mt-7 text-5xl font-black tracking-tight sm:text-7xl">Your next duo is<br/><span className="bg-gradient-to-r from-violet-400 to-cyan-300 bg-clip-text text-transparent">online right now.</span></h1><p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-500">Find compatible League players based on role, rank, language, voice and playstyle — then match and chat instantly.</p><button onClick={()=>onAuth("signup")} className="mt-9 rounded-2xl bg-white px-7 py-4 font-black text-slate-950">Find players now <ArrowRight className="ml-2 inline" size={18}/></button></main></div>; }
-function LandingWithAuth(){const [modal,setModal]=useState<"signin"|"signup"|null>(null);return <><Landing onAuth={setModal}/>{modal&&<AuthModal initialMode={modal} onClose={()=>setModal(null)}/>}</>}
-function AuthModal({initialMode,onClose}:{initialMode:"signin"|"signup";onClose:()=>void}){const [mode,setMode]=useState<"signin"|"signup">(initialMode);const [email,setEmail]=useState("");const [password,setPassword]=useState("");const [dob,setDob]=useState("");const [country,setCountry]=useState("");const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [notice,setNotice]=useState("");useEffect(()=>{const h=(e:KeyboardEvent)=>{if(e.key==="Escape")onClose()};window.addEventListener("keydown",h);return()=>window.removeEventListener("keydown",h)},[onClose]);const submit=async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();if(busy)return;setError("");setNotice("");if(mode==="signup"){const age=ageFromDob(dob);if(!dob||age===null){setError("Please enter a valid date of birth.");return}if(new Date(dob)>new Date()){setError("Date of birth cannot be in the future.");return}if(age<13){setError("You must be at least 13 years old to use LeagueMate.");return}if(age>120){setError("Please enter a valid date of birth.");return}if(!country){setError("Please select your country.");return}}setBusy(true);const r=mode==="signup"?await supabase.auth.signUp({email,password,options:{data:{display_name:"Summoner",date_of_birth:dob,country},emailRedirectTo:window.location.origin}}):await supabase.auth.signInWithPassword({email,password});setBusy(false);if(r.error)setError(r.error.message);else if(mode==="signup"&&!r.data.session)setNotice("Check your email to confirm your account, then sign in.")};const forgot=async()=>{if(!email){setError("Enter your email first.");return}setBusy(true);setError("");const {error:e}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:`${window.location.origin}/reset-password`});setBusy(false);if(e)setError(e.message);else setNotice("Password reset email sent. Check your inbox.")};return <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><div className="relative w-full max-w-md rounded-[28px] border border-white/[.08] bg-[#0d111c]/95 p-8 shadow-2xl"><button onClick={onClose} aria-label="Close" className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full border border-white/10 text-slate-400 hover:text-white"><X size={16}/></button><Brand/><h2 className="mt-7 text-2xl font-black">{mode==="signin"?"Welcome back":"Create your account"}</h2><p className="mt-1 text-sm text-slate-500">{mode==="signin"?"Sign in to find your next duo.":"Join LeagueMate and get matched in seconds."}</p><form onSubmit={submit} className="mt-7 space-y-4"><label className="block"><span className="label">Email</span><input type="email" required autoFocus className="input" placeholder="you@example.com" value={email} onChange={e=>setEmail(e.target.value)}/></label><label className="block"><span className="label">Password</span><input type="password" required minLength={6} className="input" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)}/></label>{mode==="signup"&&<><label className="block"><span className="label">Date of birth</span><input type="date" required className="input" value={dob} max={new Date().toISOString().slice(0,10)} onChange={e=>setDob(e.target.value)}/></label><label className="block"><span className="label">Country</span><CountrySelect value={country} onChange={setCountry}/></label></>}{mode==="signin"&&<div className="text-right"><button type="button" onClick={()=>void forgot()} className="text-xs font-bold text-violet-300">Forgot password?</button></div>}{error&&<div className="rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-300">{error}</div>}{notice&&<div className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm text-emerald-300">{notice}</div>}<button type="submit" disabled={busy} className="w-full rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 py-3.5 font-black disabled:opacity-50">{busy?(mode==="signin"?"Signing in…":"Creating account…"):(mode==="signin"?"Sign in":"Create account")}</button></form><div className="mt-6 text-center text-sm text-slate-500">{mode==="signin"?"New to LeagueMate?":"Already have an account?"} <button onClick={()=>{setMode(mode==="signin"?"signup":"signin");setError("");setNotice("")}} className="font-bold text-violet-300">{mode==="signin"?"Create account":"Sign in"}</button></div></div></div>}
+function Shell({children,profile,view,setView,looking,count,unreadNotifications,onUnreadChange,onPlay,onStop,onLogout,onNotificationNavigate,onToast}:{children:ReactNode;profile:Profile|null;view:View;setView:(v:View)=>void;looking:boolean;count:number;unreadNotifications:number;onUnreadChange:(n:number)=>void;onPlay:()=>void;onStop:()=>void;onLogout:()=>void;onNotificationNavigate:(n:NotificationItem)=>void;onToast:(m:string,t:"success"|"error")=>void}){const[open,setOpen]=useState(false);const nav:[View,string,any][]=[["home","Home",Home],["live","Live",Zap],["matches","Matches",Heart],["messages","Messages",MessageCircle],["connections","Teammates",Users],["profile","Profile",User]];return <div className="min-h-screen bg-[#070a12] text-white lg:flex"><aside className="hidden w-64 shrink-0 border-r border-white/[.06] bg-[#090c15] p-5 lg:flex lg:flex-col"><Brand/><div className="mt-9 space-y-1">{nav.map(([id,label,I])=><button key={id} onClick={()=>setView(id)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold ${view===id?"bg-violet-500/10 text-violet-300":"text-slate-500 hover:bg-white/[.04] hover:text-white"}`}><I size={18}/>{label}{id==="messages"&&unreadNotifications>0&&<span className="ml-auto rounded-full bg-violet-500 px-2 py-0.5 text-[9px] font-black">{unreadNotifications}</span>}</button>)}</div><button onClick={()=>setView("settings")} className="mt-auto flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-slate-500"><Settings size={18}/>Settings</button><button onClick={onLogout} className="mt-2 flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-slate-500 hover:text-white"><LogOut size={18}/>Sign out</button></aside><div className="min-w-0 flex-1"><header className="sticky top-0 z-30 flex items-center justify-between border-b border-white/[.06] bg-[#070a12]/90 px-4 py-3 backdrop-blur-xl sm:px-6"><div className="lg:hidden"><Brand/></div><div className="hidden text-sm text-slate-500 lg:block"><b className="text-white">{count}</b> players looking right now</div><div className="flex items-center gap-2"><div className="relative"><button onClick={()=>setOpen(v=>!v)} aria-label="Notifications" className="relative grid h-9 w-9 place-items-center rounded-xl border border-white/10 text-slate-400 hover:text-white"><Bell size={16}/>{unreadNotifications>0&&<span className="absolute -right-1 -top-1 rounded-full bg-violet-500 px-1 text-[8px] font-black">{unreadNotifications}</span>}</button>{open&&<NotificationCenter onClose={()=>setOpen(false)} onUnreadChange={onUnreadChange} onNavigate={n=>{setOpen(false);onNotificationNavigate(n)}}/>}</div><button onClick={looking?onStop:onPlay} className={`rounded-xl px-4 py-2 text-sm font-black ${looking?"bg-emerald-400/10 text-emerald-300":"bg-white text-slate-950"}`}>{looking?"● Looking now":"⚡ Play now"}</button></div></header><main className="px-4 pb-24 pt-6 sm:px-6 lg:px-8">{children}</main><nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/[.07] bg-[#090c15]/95 px-2 backdrop-blur-xl lg:hidden"><div className="mx-auto flex max-w-6xl justify-around overflow-x-auto">{nav.map(([id,label,I])=><button key={id} onClick={()=>setView(id)} className={`flex shrink-0 flex-col items-center gap-1 px-2.5 py-2.5 text-[10px] font-bold ${view===id?"text-violet-300":"text-slate-500"}`}><I size={18}/>{label}</button>)}</div></nav></div></div>}
+function Dashboard({profile,count,looking,candidates,onPlay,onLive}:{profile:Profile|null;count:number;looking:boolean;candidates:Candidate[];onPlay:()=>void;onLive:()=>void}){const country=getCountry(profile?.country);const age=ageFromDob(profile?.date_of_birth);return <Page title={`Welcome, ${profile?.display_name||"Summoner"}`} subtitle={looking?"You're visible in the live queue.":"Find a teammate who is ready to play now."}><div className="grid gap-5 xl:grid-cols-[.75fr_1.25fr]"><section className="rounded-[30px] border border-white/[.07] bg-gradient-to-br from-violet-500/[.14] to-cyan-400/[.04] p-7 sm:p-8"><div className="text-xs font-bold uppercase tracking-widest text-emerald-300">Live queue</div><h2 className="mt-4 text-4xl font-black tracking-tight">Your duo is already online.</h2><p className="mt-4 leading-7 text-slate-500">{count} players are looking right now. The ten best visible profiles are floating beside you.</p><button onClick={looking?onLive:onPlay} className="mt-7 rounded-2xl bg-white px-6 py-3.5 font-black text-slate-950">{looking?"Open live queue":"PLAY NOW"}</button><div className="mt-7 flex flex-wrap gap-2">{age!==null&&<span className="rounded-full border border-white/[.06] bg-black/20 px-3 py-1.5 text-xs text-slate-400">{age} years</span>}{country&&<span className="rounded-full border border-white/[.06] bg-black/20 px-3 py-1.5 text-xs text-slate-400">{country.flag} {country.name}</span>}</div></section><PlayerOrbitalSpace players={candidates.slice(0,10)}/></div></Page>}
+function Live({candidates,index,count,looking,onPlay,onStop,onRefresh,onSwipe,onToast,onBlocked}:{candidates:Candidate[];index:number;count:number;looking:boolean;onPlay:()=>void;onStop:()=>void;onRefresh:()=>void;onSwipe:(a:"like"|"pass"|"super_like")=>void;onToast:(m:string,t:"success"|"error")=>void;onBlocked:(id:string)=>void}){const p=candidates[index];const country=getCountry(p?.country);const age=ageFromDob(p?.date_of_birth);return <Page title="Find your next teammate" subtitle={`${count} looking now · compatibility-first matchmaking`}><div className="mb-5 flex justify-end gap-2"><button onClick={onRefresh} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-slate-400">Refresh</button>{looking&&<button onClick={onStop} className="rounded-xl bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-300">Stop looking</button>}</div>{!looking?<div className="mx-auto max-w-xl rounded-3xl border border-white/[.07] bg-white/[.025] p-12 text-center"><Zap className="mx-auto text-violet-300"/><h2 className="mt-4 text-2xl font-black">Start looking now</h2><button onClick={onPlay} className="mt-6 rounded-2xl bg-white px-6 py-3 font-black text-slate-950">GO LIVE</button></div>:!p?<div className="mx-auto max-w-xl rounded-3xl border border-white/[.07] bg-white/[.025] p-12 text-center"><Users className="mx-auto text-slate-600"/><h2 className="mt-4 text-2xl font-black">No compatible players right now</h2><p className="mt-2 text-sm text-slate-500">Check again in a moment.</p></div>:<div className="mx-auto max-w-2xl"><div className="overflow-hidden rounded-[30px] border border-white/[.08] bg-[#0d111c]"><div className="h-28 bg-gradient-to-br from-violet-500/25 to-cyan-400/10"/><div className="px-6 pb-7"><div className="-mt-10 grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-cyan-400 text-2xl font-black">{p.display_name.slice(0,2).toUpperCase()}</div><h2 className="mt-4 text-3xl font-black">{p.display_name}</h2><div className="mt-1 text-sm text-slate-500">{p.rank_tier||"Unranked"} {p.rank_division||""} · {p.region} · {roleLabel[p.primary_role]}</div><div className="mt-4 flex flex-wrap gap-2">{age!==null&&<span className="rounded-full border border-white/[.06] bg-white/[.03] px-3 py-1.5 text-xs text-slate-300">{age} years</span>}{country&&<span className="rounded-full border border-white/[.06] bg-white/[.03] px-3 py-1.5 text-xs text-slate-300">{country.flag} {country.name}</span>}{p.gender&&<span className="rounded-full border border-white/[.06] bg-white/[.03] px-3 py-1.5 text-xs text-slate-300">{genderLabel[p.gender]||p.gender}</span>}</div><div className="mt-6 rounded-2xl bg-violet-500/[.06] p-4"><div className="flex justify-between text-sm font-bold"><span className="text-violet-300">Compatibility</span><span>{p.score}%</span></div><div className="mt-3 h-1.5 rounded-full bg-white/5"><div className="h-full rounded-full bg-violet-500" style={{width:`${p.score}%`}}/></div></div><div className="mt-5 flex flex-wrap gap-2">{p.reasons?.slice(0,5).map(r=><span key={r} className="rounded-full border border-white/[.06] bg-white/[.03] px-3 py-1.5 text-xs text-slate-400">✓ {r}</span>)}</div>{p.bio&&<p className="mt-5 text-sm leading-6 text-slate-500">{p.bio}</p>}<div className="mt-6 flex items-center justify-between border-t border-white/[.06] pt-5"><span className="text-[11px] font-bold uppercase tracking-widest text-slate-600">Safety</span><SafetyControls userId={p.user_id} name={p.display_name} onToast={onToast} onBlocked={()=>onBlocked(p.user_id)} compact/></div></div></div><div className="mt-5 flex items-center justify-center gap-4"><button onClick={()=>onSwipe("pass")} className="grid h-14 w-14 place-items-center rounded-full border border-white/10 text-slate-400"><span className="text-xl">×</span></button><button onClick={()=>onSwipe("super_like")} className="grid h-11 w-11 place-items-center rounded-full bg-violet-500/10 text-violet-300">★</button><button onClick={()=>onSwipe("like")} className="grid h-16 w-16 place-items-center rounded-full bg-violet-500 shadow-xl"><Heart fill="white"/></button></div></div>}</Page>}
+function ProfileEditor({profile,onSaved}:{profile:Profile|null;onSaved:()=>void}){const[name,setName]=useState(profile?.display_name||"");const[bio,setBio]=useState(profile?.bio||"");const[role,setRole]=useState(profile?.primary_role||"FILL");const[gender,setGender]=useState(profile?.gender||"");const[country,setCountry]=useState(profile?.country||"");const[saving,setSaving]=useState(false);const countryInfo=getCountry(profile?.country);const age=ageFromDob(profile?.date_of_birth);const save=async()=>{if(!profile)return;setSaving(true);const{error}=await supabase.from("profiles").update({display_name:name,bio,primary_role:role,gender:gender||null,country:country||null}).eq("id",profile.id);setSaving(false);if(error)alert(error.message);else onSaved()};return <Page title="Profile" subtitle="Your public teammate identity."><div className="max-w-2xl rounded-3xl border border-white/[.07] bg-white/[.025] p-6 sm:p-8"><div className="mb-7 grid gap-3 sm:grid-cols-3"><div className="rounded-2xl border border-white/[.06] bg-black/20 p-4"><div className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Age</div><div className="mt-2 text-lg font-black">{age!==null?`${age} years`:"Not set"}</div></div><div className="rounded-2xl border border-white/[.06] bg-black/20 p-4"><div className="text-[10px] font-bold uppercase tracking-widest text-slate-600">From</div><div className="mt-2 text-lg font-black">{countryInfo?`${countryInfo.flag} ${countryInfo.name}`:"Not set"}</div></div><div className="rounded-2xl border border-white/[.06] bg-black/20 p-4"><div className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Gender</div><div className="mt-2 text-lg font-black">{gender?genderLabel[gender]||gender:"Not set"}</div></div></div><label className="mb-5 block"><span className="label">Display name</span><input className="input" value={name} onChange={e=>setName(e.target.value)}/></label><label className="mb-5 block"><span className="label">Country</span><CountrySelect value={country} onChange={setCountry}/></label><label className="mb-5 block"><span className="label">Gender</span><select className="input" value={gender} onChange={e=>setGender(e.target.value)}><option value="">Prefer not to say</option><option value="male">Male</option><option value="female">Female</option><option value="non_binary">Non-binary</option><option value="other">Other</option><option value="undisclosed">Private</option></select></label><label className="mb-5 block"><span className="label">Main role</span><select className="input" value={role} onChange={e=>setRole(e.target.value)}>{Object.entries(roleLabel).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label><label className="mb-5 block"><span className="label">Bio</span><textarea className="input resize-none" rows={5} maxLength={240} value={bio} onChange={e=>setBio(e.target.value)} placeholder="Tell teammates what you're looking for…"/></label><div className="flex justify-end"><button onClick={()=>void save()} disabled={saving} className="rounded-xl bg-white px-5 py-2.5 text-sm font-black text-slate-950">{saving?"Saving…":"Save changes"}</button></div></div></Page>}
+function Landing({onAuth}:{onAuth:(m:"signin"|"signup")=>void}){return <div className="min-h-screen bg-[#070a12] text-white"><header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6"><Brand/><button onClick={()=>onAuth("signin")} className="rounded-xl border border-white/10 px-4 py-2 text-sm font-bold">Sign in</button></header><main className="mx-auto max-w-5xl px-6 pb-20 pt-20 text-center"><div className="mx-auto inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1.5 text-xs font-bold text-emerald-300"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400"/> LIVE MATCHMAKING</div><h1 className="mt-7 text-5xl font-black tracking-tight sm:text-7xl">Your next duo is<br/><span className="bg-gradient-to-r from-violet-400 to-cyan-300 bg-clip-text text-transparent">online right now.</span></h1><p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-500">Find compatible League players based on role, rank, language, voice and playstyle — then match and chat instantly.</p><button onClick={()=>onAuth("signup")} className="mt-9 rounded-2xl bg-white px-7 py-4 font-black text-slate-950">Find players now <ArrowRight className="ml-2 inline" size={18}/></button></main></div>}
+function LandingWithAuth(){const[modal,setModal]=useState<"signin"|"signup"|null>(null);return <><Landing onAuth={setModal}/>{modal&&<AuthModal initialMode={modal} onClose={()=>setModal(null)}/>}</>}
+function AuthModal({initialMode,onClose}:{initialMode:"signin"|"signup";onClose:()=>void}){const[mode,setMode]=useState<"signin"|"signup">(initialMode);const[email,setEmail]=useState("");const[password,setPassword]=useState("");const[dob,setDob]=useState("");const[country,setCountry]=useState("");const[busy,setBusy]=useState(false);const[error,setError]=useState("");const[notice,setNotice]=useState("");useEffect(()=>{const h=(e:KeyboardEvent)=>{if(e.key==="Escape")onClose()};window.addEventListener("keydown",h);return()=>window.removeEventListener("keydown",h)},[onClose]);const submit=async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();if(busy)return;setError("");setNotice("");if(mode==="signup"){const age=ageFromDob(dob);if(!dob||age===null){setError("Please enter a valid date of birth.");return}if(new Date(dob)>new Date()){setError("Date of birth cannot be in the future.");return}if(age<13){setError("You must be at least 13 years old to use LeagueMate.");return}if(age>120){setError("Please enter a valid date of birth.");return}if(!country){setError("Please select your country.");return}}setBusy(true);const r=mode==="signup"?await supabase.auth.signUp({email,password,options:{data:{display_name:"Summoner",date_of_birth:dob,country},emailRedirectTo:window.location.origin}}):await supabase.auth.signInWithPassword({email,password});setBusy(false);if(r.error)setError(r.error.message);else if(mode==="signup"&&!r.data.session)setNotice("Check your email to confirm your account, then sign in.")};const forgot=async()=>{if(!email){setError("Enter your email first.");return}setBusy(true);setError("");const{error:e}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:`${window.location.origin}/reset-password`});setBusy(false);if(e)setError(e.message);else setNotice("Password reset email sent. Check your inbox.")};return <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><div className="relative w-full max-w-md rounded-[28px] border border-white/[.08] bg-[#0d111c]/95 p-8 shadow-2xl"><button onClick={onClose} aria-label="Close" className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full border border-white/10 text-slate-400 hover:text-white"><X size={16}/></button><Brand/><h2 className="mt-7 text-2xl font-black">{mode==="signin"?"Welcome back":"Create your account"}</h2><p className="mt-1 text-sm text-slate-500">{mode==="signin"?"Sign in to find your next duo.":"Join LeagueMate and get matched in seconds."}</p><form onSubmit={submit} className="mt-7 space-y-4"><label className="block"><span className="label">Email</span><input type="email" required autoFocus className="input" value={email} onChange={e=>setEmail(e.target.value)}/></label><label className="block"><span className="label">Password</span><input type="password" required minLength={6} className="input" value={password} onChange={e=>setPassword(e.target.value)}/></label>{mode==="signup"&&<><label className="block"><span className="label">Date of birth</span><input type="date" required className="input" value={dob} max={new Date().toISOString().slice(0,10)} onChange={e=>setDob(e.target.value)}/></label><label className="block"><span className="label">Country</span><CountrySelect value={country} onChange={setCountry}/></label></>}{mode==="signin"&&<div className="text-right"><button type="button" onClick={()=>void forgot()} className="text-xs font-bold text-violet-300">Forgot password?</button></div>}{error&&<div className="rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-300">{error}</div>}{notice&&<div className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm text-emerald-300">{notice}</div>}<button type="submit" disabled={busy} className="w-full rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 py-3.5 font-black disabled:opacity-50">{busy?(mode==="signin"?"Signing in…":"Creating account…"):(mode==="signin"?"Sign in":"Create account")}</button></form><div className="mt-6 text-center text-sm text-slate-500">{mode==="signin"?"New to LeagueMate?":"Already have an account?"} <button onClick={()=>{setMode(mode==="signin"?"signup":"signin");setError("");setNotice("")}} className="font-bold text-violet-300">{mode==="signin"?"Create account":"Sign in"}</button></div></div></div>}
 function Brand(){return <div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-xl bg-violet-500"><Swords size={18}/></div><span className="font-black">LeagueMate</span></div>}
 function MatchToast({message,onOpen}:{message:string;onOpen:()=>void}){return <div className="fixed right-4 top-20 z-[60] w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-violet-400/20 bg-[#111526]/95 p-4 shadow-2xl backdrop-blur-xl"><div className="flex items-start gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-500/15 text-violet-300"><Heart fill="currentColor" size={18}/></div><div className="min-w-0 flex-1"><div className="font-black">It's a match!</div><div className="mt-1 text-sm text-slate-400">{message}</div><button onClick={onOpen} className="mt-3 rounded-lg bg-white px-3 py-1.5 text-xs font-black text-slate-950">Open chat</button></div><button onClick={onOpen} className="text-slate-600 hover:text-white"><X size={16}/></button></div></div>}
 function Splash(){return <div className="grid min-h-screen place-items-center bg-[#070a12] text-white"><div className="text-center"><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-violet-500"><Swords/></div><h1 className="mt-4 text-2xl font-black">LeagueMate</h1><p className="mt-2 text-sm text-slate-500">Finding your next teammate…</p></div></div>}
