@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Bell, Heart, Home, LogOut, MessageCircle, Settings, Swords, User, Users, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { OnboardingView, MatchesView, MessagesView, SettingsView } from "@/components/LeagueMateViews";
+import { SafetyControls, Toast } from "@/components/SafetyControls";
 import { CountrySelect } from "@/components/CountrySelect";
 import { ageFromDob, getCountry } from "@/lib/countries";
 
