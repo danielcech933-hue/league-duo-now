@@ -204,12 +204,13 @@ function LeagueMateApp() {
       onOpenMatch={() => { if (match) setView("messages"); setMatchNotice(null); }}
     >
       {view === "home" && <Dashboard profile={profile} count={count} looking={looking} onPlay={start} onLive={() => setView("live")} />}
-      {view === "live" && <Live candidates={candidates} index={index} count={count} looking={looking} onPlay={start} onStop={stop} onRefresh={refresh} onSwipe={swipe} />}
-      {view === "matches" && <MatchesView onOpenChat={(id, name) => { setMatch({ name, conversationId: id }); setView("messages"); }} />}
-      {view === "messages" && <MessagesView initialConversationId={match?.conversationId} initialName={match?.name} />}
+      {view === "live" && <Live candidates={candidates} index={index} count={count} looking={looking} onPlay={start} onStop={stop} onRefresh={refresh} onSwipe={swipe} onToast={showToast} onBlocked={handleBlocked} />}
+      {view === "matches" && <MatchesView onOpenChat={(id, name) => { setMatch({ name, conversationId: id }); setView("messages"); }} onToast={showToast} />}
+      {view === "messages" && <MessagesView initialConversationId={match?.conversationId} initialName={match?.name} onToast={showToast} />}
       {view === "profile" && <ProfileEditor profile={profile} onSaved={() => loadProfile(profile!.id)} />}
       {view === "settings" && <SettingsView profile={profile} onSaved={() => loadProfile(profile!.id)} />}
       {matchNotice && <MatchToast message={matchNotice} onOpen={() => { if (match) setView("messages"); setMatchNotice(null); }} />}
+      {toast && <Toast tone={toast.tone} message={toast.message} onClose={() => setToast(null)} />}
     </Shell>
   );
 }
