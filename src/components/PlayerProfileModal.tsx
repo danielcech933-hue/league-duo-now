@@ -1,15 +1,11 @@
 import { useEffect, useState } from "react";
-import { Award, Check, Gamepad2, Globe2, History, MessageCircle, Star, Swords, Trophy, UserRound, X } from "lucide-react";
+import { Award, Check, Gamepad2, Globe2, History, Star, Swords, Trophy, UserRound, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { ageFromDob, getCountry } from "@/lib/countries";
 
 const roleLabel: Record<string, string> = { TOP: "Top", JUNGLE: "Jungle", MID: "Mid", ADC: "ADC", SUPPORT: "Support", FILL: "Fill" };
 
-type Profile = {
-  id: string; display_name: string; avatar_url?: string | null; bio?: string | null; region?: string | null;
-  languages?: string[] | null; primary_role?: string | null; secondary_role?: string | null; voice?: string | null;
-  playstyle?: string | null; date_of_birth?: string | null; country?: string | null;
-};
+type Profile = { id: string; display_name: string; avatar_url?: string | null; bio?: string | null; region?: string | null; languages?: string[] | null; primary_role?: string | null; secondary_role?: string | null; voice?: string | null; playstyle?: string | null; date_of_birth?: string | null; country?: string | null };
 type Reputation = { rating_count: number; great_count: number; okay_count: number; bad_count: number; great_pct: number; reputation_score: number };
 type DuoHistory = { played_together: number; wins: number; losses: number; unknown_results: number; last_played_at: string | null };
 type Props = { userId: string; name?: string; onClose: () => void; onToast?: (message: string, tone: "success" | "error") => void };
@@ -42,8 +38,7 @@ export function PlayerProfileModal({ userId, name, onClose, onToast }: Props) {
       setRep((Array.isArray(r) ? r[0] : r) as Reputation | null);
       setHistory((Array.isArray(h) ? h[0] : h) as DuoHistory | null);
       const row = (connections || []).find((c: any) => c.other_user === userId);
-      if (row) { setConnected(row.status === "accepted" ? "accepted" : "pending"); setRequestByMe(Boolean(row.requested_by_me)); }
-      else { setConnected("none"); setRequestByMe(false); }
+      if (row) { setConnected(row.status === "accepted" ? "accepted" : "pending"); setRequestByMe(Boolean(row.requested_by_me)); } else { setConnected("none"); setRequestByMe(false); }
       setBusy(false);
     };
     void load();
@@ -57,8 +52,7 @@ export function PlayerProfileModal({ userId, name, onClose, onToast }: Props) {
     const { error: e } = await supabase.rpc("send_connection_request", { _target: userId });
     setConnectionBusy(false);
     if (e) { onToast?.(e.message, "error"); return; }
-    setConnected("pending"); setRequestByMe(true);
-    onToast?.("Teammate request sent.", "success");
+    setConnected("pending"); setRequestByMe(true); onToast?.("Teammate request sent.", "success");
   };
 
   const recordGame = async (result: "win" | "loss" | "unknown") => {
@@ -69,8 +63,7 @@ export function PlayerProfileModal({ userId, name, onClose, onToast }: Props) {
     const next = await supabase.rpc("duo_history", { _other: userId });
     const row = Array.isArray(next.data) ? next.data[0] : next.data;
     setHistory((row as DuoHistory | null) || null);
-    const label = result === "win" ? "Win" : result === "loss" ? "Loss" : "Game";
-    onToast?.(`${label} recorded for your duo history.`, "success");
+    onToast?.(`${result === "win" ? "Win" : result === "loss" ? "Loss" : "Game"} recorded for your duo history.`, "success");
   };
 
   const country = getCountry(profile?.country);
@@ -97,6 +90,5 @@ export function PlayerProfileModal({ userId, name, onClose, onToast }: Props) {
     </div>
   </div>;
 }
-
 function InfoCard({ label, value }: { label: string; value: string }) { return <div className="rounded-2xl border border-white/[.06] bg-white/[.025] p-4"><div className="text-[10px] font-bold uppercase tracking-widest text-slate-600">{label}</div><div className="mt-2 text-sm font-bold capitalize text-slate-300">{value}</div></div>; }
 function Stat({ label, value }: { label: string; value: string }) { return <div className="rounded-xl bg-white/[.025] p-3 text-center"><div className="text-lg font-black text-white">{value}</div><div className="mt-1 text-[10px] uppercase tracking-widest text-slate-600">{label}</div></div>; }
