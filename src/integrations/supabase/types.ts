@@ -576,6 +576,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      block_user: { Args: { _target: string }; Returns: Json }
       get_live_candidates: {
         Args: { _limit?: number }
         Returns: {
@@ -637,6 +638,10 @@ export type Database = {
         Args: { _division?: string; _tier: string }
         Returns: number
       }
+      report_user: {
+        Args: { _details?: string; _reason: string; _target: string }
+        Returns: Json
+      }
       roles_complementary: {
         Args: { _a: string; _b: string }
         Returns: boolean
@@ -685,6 +690,7 @@ export type Database = {
         Args: { _action: string; _score?: number; _target: string }
         Returns: Json
       }
+      unblock_user: { Args: { _target: string }; Returns: Json }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"

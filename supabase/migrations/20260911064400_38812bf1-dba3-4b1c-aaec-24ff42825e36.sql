@@ -1,0 +1,1 @@
+revoke execute on function public.bump_conversation() from public, anon, authenticated;
