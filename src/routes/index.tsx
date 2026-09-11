@@ -66,6 +66,13 @@ function LeagueMateApp() {
   const [match, setMatch] = useState<{ name: string; conversationId: string } | null>(null);
   const [matchNotice, setMatchNotice] = useState<string | null>(null);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [toast, setToast] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const showToast = (message: string, tone: "success" | "error") => setToast({ message, tone });
+  const handleBlocked = (userId: string) => {
+    setCandidates((list) => list.filter((c) => c.user_id !== userId));
+    setIndex((v) => Math.max(0, v));
+    void refresh();
+  };
 
   const loadProfile = async (id: string) => {
     const { data } = await supabase.from("profiles").select("*").eq("id", id).maybeSingle();
