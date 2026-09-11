@@ -99,7 +99,7 @@ export function BlockModal({ userId, name, onClose, onDone }: { userId: string; 
   );
 }
 
-export function ReportModal({ userId, name, onClose, onDone }: { userId: string; name: string; onClose: () => void; onDone: (msg: string, tone: "success" | "error") => void }) {
+export function ReportModal({ userId, name, onClose, onDone }: { userId: string; name: string; onClose: () => void; onDone: (msg: string, tone: "success" | "error", blocked: boolean) => void }) {
   const [reason, setReason] = useState("");
   const [details, setDetails] = useState("");
   const [alsoBlock, setAlsoBlock] = useState(false);
