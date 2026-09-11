@@ -111,7 +111,7 @@ export function ReportModal({ userId, name, onClose, onDone }: { userId: string;
     if (!reason) { setError("Please choose a reason."); return; }
     setBusy(true);
     setError("");
-    const { error: err } = await supabase.rpc("report_user", { _target: userId, _reason: reason, _details: details.trim() || undefined });
+    const { error: err } = await supabase.rpc("report_user", { _target: userId, _reason: reason, _details: details.trim() });
     if (err) { setBusy(false); setError(err.message); return; }
     if (alsoBlock) {
       const { error: be } = await supabase.rpc("block_user", { _target: userId });
