@@ -118,7 +118,7 @@ export function ReportModal({ userId, name, onClose, onDone }: { userId: string;
       if (be) { setBusy(false); setError(be.message); return; }
     }
     setBusy(false);
-    onDone(alsoBlock ? `Report sent and ${name} is blocked.` : `Thanks — your report about ${name} was sent to moderation.`, "success");
+    onDone(alsoBlock ? `Report sent and ${name} is blocked.` : `Thanks — your report about ${name} was sent to moderation.`, "success", alsoBlock);
     onClose();
   };
   return (
