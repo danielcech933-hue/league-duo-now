@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Bell, Heart, Home, LogOut, MessageCircle, Settings, Swords, User, Users, X, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { OnboardingView, MatchesView, MessagesView, SettingsView } from "@/components/LeagueMateViews";
+import { ConnectionsView } from "@/components/ConnectionsView";
+import { NotificationCenter } from "@/components/NotificationCenter";
 import { SafetyControls, Toast } from "@/components/SafetyControls";
 import { CountrySelect } from "@/components/CountrySelect";
 import { ageFromDob, getCountry } from "@/lib/countries";
@@ -52,7 +54,17 @@ type Candidate = {
   country?: string | null;
 };
 
-type View = "home" | "live" | "matches" | "messages" | "profile" | "settings";
+type NotificationItem = {
+  id: string;
+  type: string;
+  title: string;
+  body?: string | null;
+  data?: Record<string, any> | null;
+  read_at?: string | null;
+  created_at: string;
+};
+
+type View = "home" | "live" | "matches" | "messages" | "connections" | "profile" | "settings";
 const roleLabel: Record<string, string> = { TOP: "Top", JUNGLE: "Jungle", MID: "Mid", ADC: "ADC", SUPPORT: "Support", FILL: "Fill" };
 
 function LeagueMateApp() {
@@ -69,35 +81,16 @@ function LeagueMateApp() {
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [toast, setToast] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const showToast = (message: string, tone: "success" | "error") => setToast({ message, tone });
-  const handleBlocked = (userId: string) => {
-    setCandidates((list) => list.filter((c) => c.user_id !== userId));
-    setIndex((v) => Math.max(0, v));
-    void refresh();
-  };
 
   const loadProfile = async (id: string) => {
     const { data } = await supabase.from("profiles").select("*").eq("id", id).maybeSingle();
     setProfile(data as Profile | null);
   };
 
-  useEffect(() => {
-    let mounted = true;
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (!mounted) return;
-      setSession(data.session);
-      if (data.session) await loadProfile(data.session.user.id);
-      setLoading(false);
-    });
-    const { data } = supabase.auth.onAuthStateChange(async (_, next) => {
-      setSession(next);
-      if (next) await loadProfile(next.user.id);
-      else setProfile(null);
-    });
-    return () => {
-      mounted = false;
-      data.subscription.unsubscribe();
-    };
-  }, []);
+  const loadUnreadNotifications = async () => {
+    const { count: unread } = await supabase.from("notifications").select("id", { count: "exact", head: true }).is("read_at", null);
+    setUnreadNotifications(unread ?? 0);
+  };
 
   const refresh = async () => {
     if (!session) return;
@@ -116,6 +109,33 @@ function LeagueMateApp() {
     setCount(typeof c === "number" ? c : 0);
     setIndex((current) => Math.min(current, Math.max(nextCandidates.length - 1, 0)));
   };
+
+  useEffect(() => {
+    let mounted = true;
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (!mounted) return;
+      setSession(data.session);
+      if (data.session) {
+        await loadProfile(data.session.user.id);
+        await loadUnreadNotifications();
+      }
+      setLoading(false);
+    });
+    const { data } = supabase.auth.onAuthStateChange(async (_, next) => {
+      setSession(next);
+      if (next) {
+        await loadProfile(next.user.id);
+        await loadUnreadNotifications();
+      } else {
+        setProfile(null);
+        setUnreadNotifications(0);
+      }
+    });
+    return () => {
+      mounted = false;
+      data.subscription.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     if (session) refresh();
@@ -186,6 +206,34 @@ function LeagueMateApp() {
     setTimeout(refresh, 300);
   };
 
+  const handleBlocked = (userId: string) => {
+    setCandidates((list) => list.filter((c) => c.user_id !== userId));
+    setIndex((v) => Math.max(0, v));
+    void refresh();
+  };
+
+  const navigateFromNotification = (notification: NotificationItem) => {
+    const data = notification.data || {};
+    const conversationId = data.conversation_id || data.conversationId;
+    const otherUser = data.user_id || data.other_user || data.target_user;
+    const name = data.name || data.display_name || "Teammate";
+    if (notification.type === "match" || notification.type === "message" || notification.type === "new_message") {
+      if (conversationId) setMatch({ name, conversationId });
+      setView("messages");
+      return;
+    }
+    if (notification.type === "connection_request" || notification.type === "connection_accepted") {
+      setView("connections");
+      return;
+    }
+    if (notification.type === "duo_invite") {
+      if (conversationId) setMatch({ name, conversationId });
+      setView("messages");
+      return;
+    }
+    if (otherUser) setView("connections");
+  };
+
   if (loading) return <Splash />;
   if (!session) return <LandingWithAuth />;
   if (profile && !profile.onboarded) return <OnboardingView profile={profile} onComplete={() => loadProfile(profile.id)} />;
@@ -194,19 +242,23 @@ function LeagueMateApp() {
     <Shell
       profile={profile}
       view={view}
-      setView={(next) => { setView(next); if (next !== "settings") setUnreadNotifications(0); }}
+      setView={setView}
       looking={looking}
       count={count}
       unreadNotifications={unreadNotifications}
+      onUnreadChange={setUnreadNotifications}
       onPlay={start}
       onStop={stop}
       onLogout={() => supabase.auth.signOut()}
       onOpenMatch={() => { if (match) setView("messages"); setMatchNotice(null); }}
+      onNotificationNavigate={navigateFromNotification}
+      onToast={showToast}
     >
       {view === "home" && <Dashboard profile={profile} count={count} looking={looking} onPlay={start} onLive={() => setView("live")} />}
       {view === "live" && <Live candidates={candidates} index={index} count={count} looking={looking} onPlay={start} onStop={stop} onRefresh={refresh} onSwipe={swipe} onToast={showToast} onBlocked={handleBlocked} />}
       {view === "matches" && <MatchesView onOpenChat={(id, name) => { setMatch({ name, conversationId: id }); setView("messages"); }} onToast={showToast} />}
       {view === "messages" && <MessagesView initialConversationId={match?.conversationId} initialName={match?.name} onToast={showToast} />}
+      {view === "connections" && <ConnectionsView onOpenChat={(id, name) => { setMatch({ name, conversationId: id }); setView("messages"); }} onToast={showToast} />}
       {view === "profile" && <ProfileEditor profile={profile} onSaved={() => loadProfile(profile!.id)} />}
       {view === "settings" && <SettingsView profile={profile} onSaved={() => loadProfile(profile!.id)} />}
       {matchNotice && <MatchToast message={matchNotice} onOpen={() => { if (match) setView("messages"); setMatchNotice(null); }} />}
@@ -235,9 +287,10 @@ function AuthModal({ initialMode, onClose }: { initialMode: "signin" | "signup";
 function Feature({icon,title,text}:{icon:any;title:string;text:string}){return <div className="rounded-2xl border border-white/[.07] bg-white/[.025] p-5 text-left"><div className="text-violet-300">{icon}</div><div className="mt-3 font-bold">{title}</div><div className="mt-1 text-sm text-slate-500">{text}</div></div>}
 function Brand(){return <div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-xl bg-violet-500"><Swords size={18}/></div><span className="font-black">LeagueMate</span></div>}
 
-function Shell({ children, profile, view, setView, looking, count, unreadNotifications, onPlay, onStop, onLogout, onOpenMatch }: { children:any; profile:Profile|null; view:View; setView:(v:View)=>void; looking:boolean; count:number; unreadNotifications:number; onPlay:()=>void; onStop:()=>void; onLogout:()=>void; onOpenMatch:()=>void }){
-  const nav:[View,string,any][]=[["home","Home",Home],["live","Live",Zap],["matches","Matches",Heart],["messages","Messages",MessageCircle],["profile","Profile",User]];
-  return <div className="min-h-screen bg-[#070a12] text-white lg:flex"><aside className="hidden w-64 shrink-0 border-r border-white/[.06] bg-[#090c15] p-5 lg:flex lg:flex-col"><Brand/><div className="mt-9 space-y-1">{nav.map(([id,label,I])=><button key={id} onClick={()=>setView(id)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold ${view===id?"bg-violet-500/10 text-violet-300":"text-slate-500 hover:bg-white/[.04] hover:text-white"}`}><I size={18}/>{label}{id === "messages" && unreadNotifications>0 && <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-violet-500 px-1 text-[9px] font-black text-white">{unreadNotifications}</span>}</button>)}</div><button onClick={()=>setView("settings")} className="mt-auto flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-slate-500"><Settings size={18}/>Settings</button><button onClick={onLogout} className="mt-2 flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-slate-500 hover:text-white"><LogOut size={18}/>Sign out</button></aside><div className="min-w-0 flex-1"><header className="sticky top-0 z-30 flex items-center justify-between border-b border-white/[.06] bg-[#070a12]/90 px-4 py-3 backdrop-blur-xl sm:px-6"><div className="lg:hidden"><Brand/></div><div className="hidden text-sm text-slate-500 lg:block"><b className="text-white">{count}</b> players looking right now</div><div className="flex items-center gap-2"><div className="relative grid h-9 w-9 place-items-center rounded-xl border border-white/10 text-slate-500"><Bell size={16}/>{unreadNotifications>0&&<span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-violet-500 px-1 text-[8px] font-black text-white">{unreadNotifications}</span>}</div><button onClick={looking?onStop:onPlay} className={`rounded-xl px-4 py-2 text-sm font-black ${looking?"bg-emerald-400/10 text-emerald-300":"bg-white text-slate-950"}`}>{looking?"● Looking now":"⚡ Play now"}</button></div></header><main className="px-4 pb-24 pt-6 sm:px-6 lg:px-8">{children}</main><nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/[.07] bg-[#090c15]/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden"><div className="mx-auto flex max-w-lg justify-around">{nav.map(([id,label,I])=><button key={id} onClick={()=>setView(id)} className={`flex flex-col items-center gap-1 px-3 py-2.5 text-[10px] font-bold ${view===id?"text-violet-300":"text-slate-500"}`}><I size={19}/>{label}</button>)}</div></nav></div></div>;
+function Shell({ children, profile, view, setView, looking, count, unreadNotifications, onUnreadChange, onPlay, onStop, onLogout, onOpenMatch, onNotificationNavigate, onToast }: { children:any; profile:Profile|null; view:View; setView:(v:View)=>void; looking:boolean; count:number; unreadNotifications:number; onUnreadChange:(count:number)=>void; onPlay:()=>void; onStop:()=>void; onLogout:()=>void; onOpenMatch:()=>void; onNotificationNavigate:(notification:NotificationItem)=>void; onToast:(message:string,tone:"success"|"error")=>void }){
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const nav:[View,string,any][]=[["home","Home",Home],["live","Live",Zap],["matches","Matches",Heart],["messages","Messages",MessageCircle],["connections","Teammates",Users],["profile","Profile",User]];
+  return <div className="min-h-screen bg-[#070a12] text-white lg:flex"><aside className="hidden w-64 shrink-0 border-r border-white/[.06] bg-[#090c15] p-5 lg:flex lg:flex-col"><Brand/><div className="mt-9 space-y-1">{nav.map(([id,label,I])=><button key={id} onClick={()=>setView(id)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold ${view===id?"bg-violet-500/10 text-violet-300":"text-slate-500 hover:bg-white/[.04] hover:text-white"}`}><I size={18}/>{label}{id === "messages" && unreadNotifications>0 && <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-violet-500 px-1 text-[9px] font-black text-white">{unreadNotifications}</span>}</button>)}</div><button onClick={()=>setView("settings")} className="mt-auto flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-slate-500"><Settings size={18}/>Settings</button><button onClick={onLogout} className="mt-2 flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-slate-500 hover:text-white"><LogOut size={18}/>Sign out</button></aside><div className="min-w-0 flex-1"><header className="sticky top-0 z-30 flex items-center justify-between border-b border-white/[.06] bg-[#070a12]/90 px-4 py-3 backdrop-blur-xl sm:px-6"><div className="lg:hidden"><Brand/></div><div className="hidden text-sm text-slate-500 lg:block"><b className="text-white">{count}</b> players looking right now</div><div className="flex items-center gap-2"><div className="relative"><button onClick={()=>setNotificationsOpen((v)=>!v)} aria-label="Notifications" className={`relative grid h-9 w-9 place-items-center rounded-xl border border-white/10 transition ${notificationsOpen?"bg-white/[.06] text-white":"text-slate-500 hover:text-white"}`}><Bell size={16}/>{unreadNotifications>0&&<span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-violet-500 px-1 text-[8px] font-black text-white">{unreadNotifications}</span>}</button>{notificationsOpen&&<NotificationCenter onClose={()=>setNotificationsOpen(false)} onUnreadChange={onUnreadChange} onNavigate={(notification)=>{setNotificationsOpen(false);onNotificationNavigate(notification);}}/>}</div><button onClick={looking?onStop:onPlay} className={`rounded-xl px-4 py-2 text-sm font-black ${looking?"bg-emerald-400/10 text-emerald-300":"bg-white text-slate-950"}`}>{looking?"● Looking now":"⚡ Play now"}</button></div></header><main className="px-4 pb-24 pt-6 sm:px-6 lg:px-8">{children}</main><nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/[.07] bg-[#090c15]/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden"><div className="mx-auto flex max-w-lg justify-around overflow-x-auto">{nav.map(([id,label,I])=><button key={id} onClick={()=>setView(id)} className={`flex shrink-0 flex-col items-center gap-1 px-2.5 py-2.5 text-[10px] font-bold ${view===id?"text-violet-300":"text-slate-500"}`}><I size={19}/>{label}</button>)}</div></nav></div></div>;
 }
 
 function Dashboard({ profile, count, looking, onPlay, onLive }: { profile:Profile|null; count:number; looking:boolean; onPlay:()=>void; onLive:()=>void }){const country=getCountry(profile?.country);const age=ageFromDob(profile?.date_of_birth);return <Page title={`Welcome, ${profile?.display_name||"Summoner"}`} subtitle={looking?"You're visible in the live queue.":"Find a teammate who is ready to play now."}><div className="grid gap-5 lg:grid-cols-[1.3fr_.7fr]"><section className="overflow-hidden rounded-[28px] border border-white/[.07] bg-gradient-to-br from-violet-500/[.14] to-cyan-400/[.04] p-8 sm:p-10"><div className="text-xs font-bold uppercase tracking-widest text-emerald-300">Live queue</div><h2 className="mt-4 text-4xl font-black tracking-tight">Your duo is already online.</h2><p className="mt-4 max-w-lg leading-7 text-slate-500">{count} players are looking right now. LeagueMate ranks them by compatibility with your preferences.</p><button onClick={looking?onLive:onPlay} className="mt-7 rounded-2xl bg-white px-6 py-3.5 font-black text-slate-950">{looking?"Open live queue":"PLAY NOW"}</button></section><section className="rounded-[28px] border border-white/[.07] bg-white/[.025] p-6"><div className="text-xs font-bold uppercase tracking-widest text-slate-600">Your card</div><div className="mt-5 text-2xl font-black">{profile?.display_name}</div><div className="mt-1 text-sm text-slate-500">{roleLabel[profile?.primary_role||"FILL"]} · {profile?.region}</div><div className="mt-6 grid grid-cols-2 gap-2">{[["Role",roleLabel[profile?.primary_role||"FILL"]],["Style",profile?.playstyle],["Voice",profile?.voice],["Languages",profile?.languages?.join(", ")]].map(([a,b])=><div key={a} className="rounded-xl bg-black/20 p-3"><div className="text-[10px] uppercase text-slate-600">{a}</div><div className="mt-1 text-sm font-semibold capitalize text-slate-300">{b}</div></div>)}</div><div className="mt-5 flex flex-wrap gap-2">{age!==null&&<span className="rounded-full border border-white/[.06] bg-white/[.03] px-3 py-1.5 text-xs text-slate-300">{age} years</span>}{country&&<span className="rounded-full border border-white/[.06] bg-white/[.03] px-3 py-1.5 text-xs text-slate-300">{country.flag} {country.name}</span>}</div></section></div></Page>}
