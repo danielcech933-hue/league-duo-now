@@ -37,6 +37,7 @@ function clean(value: unknown, max: number) {
 async function riotFetch<T>(url: string, apiKey: string): Promise<T> {
   const response = await fetch(url, {
     headers: { "X-Riot-Token": apiKey, Accept: "application/json" },
+    signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) {
     const text = await response.text();
@@ -51,10 +52,14 @@ async function riotFetch<T>(url: string, apiKey: string): Promise<T> {
 async function championNames(ids: number[]) {
   if (!ids.length) return [] as string[];
   try {
-    const versions = await fetch("https://ddragon.leagueoflegends.com/api/versions.json").then(r => r.json()) as string[];
+    const versionsResponse = await fetch("https://ddragon.leagueoflegends.com/api/versions.json", { signal: AbortSignal.timeout(10_000) });
+    if (!versionsResponse.ok) return [] as string[];
+    const versions = await versionsResponse.json() as string[];
     const version = versions?.[0];
     if (!version) return [];
-    const data = await fetch(`https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/champion.json`).then(r => r.json()) as { data: Record<string, { key: string; name: string }> };
+    const dataResponse = await fetch(`https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/champion.json`, { signal: AbortSignal.timeout(10_000) });
+    if (!dataResponse.ok) return [] as string[];
+    const data = await dataResponse.json() as { data: Record<string, { key: string; name: string }> };
     const byId = new Map(Object.values(data.data).map(c => [c.key, c.name]));
     return ids.map(id => byId.get(String(id))).filter(Boolean) as string[];
   } catch {
@@ -111,7 +116,7 @@ Deno.serve(async (req) => {
       riotKey,
     );
     const leagues = await riotFetch<LeagueEntry[]>(
-      `https://${routing.platform}.api.riotgames.com/lol/league/v4/entries/by-summoner/${encodeURIComponent(summoner.id)}`,
+      `https://${routing.platform}.api.riotgames.com/lol/league/v4/entries/by-puuid/${encodeURIComponent(account.puuid)}`,
       riotKey,
     );
     const solo = leagues.find(l => l.queueType === "RANKED_SOLO_5x5");
