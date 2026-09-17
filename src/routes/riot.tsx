@@ -32,7 +32,7 @@ function RiotPage() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { void load(); }, []);
 
   const sync = async () => {
     setBusy(true); setError("");
@@ -47,7 +47,14 @@ function RiotPage() {
   };
 
   const disconnect = async () => {
-    await supabase.from("riot_accounts").delete().neq("user_id", "00000000-0000-0000-0000-000000000000");
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+    if (!userId) return;
+    const { error: deleteError } = await supabase.from("riot_accounts").delete().eq("user_id", userId);
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
     setAccount(null); setGameName(""); setTagLine("");
   };
 
@@ -67,12 +74,12 @@ function RiotPage() {
           <p className="mt-5 max-w-xl text-sm leading-6 text-slate-500">Connect your Riot ID so LeagueMate can verify your rank and automatically enrich your teammate card with level, win rate and top champions.</p>
           <div className="mt-7 grid gap-4 sm:grid-cols-[1fr_120px]">
             <label><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-600">Game name</span><input value={gameName} onChange={e=>setGameName(e.target.value)} className="input" placeholder="Faker"/></label>
-            <label><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-600">Tag line</span><input value={tagLine} onChange={e=>setTagLine(e.target.value.replace(/^#/, ""))} className="input" placeholder="KR1"/></label>
+            <label><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-600">Tag line</span><input value={tagLine} onChange={e=>setTagLine(e.target.value.replace(/^#/ , ""))} className="input" placeholder="KR1"/></label>
           </div>
           <label className="mt-4 block"><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-600">League region</span><select value={region} onChange={e=>setRegion(e.target.value)} className="input">{regions.map(r=><option key={r}>{r}</option>)}</select></label>
           {error && <div className="mt-5 flex gap-2 rounded-2xl border border-red-400/20 bg-red-400/10 p-4 text-sm text-red-300"><X size={18} className="shrink-0"/>{error}</div>}
-          <button onClick={sync} disabled={busy || !gameName.trim() || !tagLine.trim()} className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-3.5 font-black text-slate-950 disabled:opacity-50">{busy?<><Loader2 className="animate-spin" size={18}/> Verifying with Riot…</>:account?.verified?<><RefreshCw size={17}/> Refresh Riot data</>:<>Connect & verify <Sparkles size={17}/></>}</button>
-          {account && <button onClick={disconnect} className="mt-3 w-full rounded-xl py-2 text-sm text-slate-600 hover:text-red-300">Disconnect Riot account</button>}
+          <button onClick={()=>void sync()} disabled={busy || !gameName.trim() || !tagLine.trim()} className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-white py-3.5 font-black text-slate-950 disabled:opacity-50">{busy?<><Loader2 className="animate-spin" size={18}/> Verifying with Riot…</>:account?.verified?<><RefreshCw size={17}/> Refresh Riot data</>:<>Connect & verify <Sparkles size={17}/></>}</button>
+          {account && <button onClick={()=>void disconnect()} className="mt-3 w-full rounded-xl py-2 text-sm text-slate-600 hover:text-red-300">Disconnect Riot account</button>}
           <div className="mt-7 rounded-2xl border border-white/[.06] bg-black/20 p-4 text-xs leading-5 text-slate-600">Your Riot API key stays on the server. The browser never receives it. LeagueMate stores only the account identifier and public game statistics needed for matchmaking.</div>
         </section>
 
