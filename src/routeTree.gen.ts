@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ConnectionsRouteImport } from './routes/connections'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RiotRouteImport } from './routes/riot'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConnectionsRoute = ConnectionsRouteImport.update({
+  id: '/connections',
+  path: '/connections',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -31,30 +37,34 @@ const RiotRoute = RiotRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/connections': typeof ConnectionsRoute
   '/reset-password': typeof ResetPasswordRoute
   '/riot': typeof RiotRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/connections': typeof ConnectionsRoute
   '/reset-password': typeof ResetPasswordRoute
   '/riot': typeof RiotRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/connections': typeof ConnectionsRoute
   '/reset-password': typeof ResetPasswordRoute
   '/riot': typeof RiotRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/reset-password' | '/riot'
+  fullPaths: '/' | '/connections' | '/reset-password' | '/riot'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/reset-password' | '/riot'
-  id: '__root__' | '/' | '/reset-password' | '/riot'
+  to: '/' | '/connections' | '/reset-password' | '/riot'
+  id: '__root__' | '/' | '/connections' | '/reset-password' | '/riot'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ConnectionsRoute: typeof ConnectionsRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   RiotRoute: typeof RiotRoute
 }
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/connections': {
+      id: '/connections'
+      path: '/connections'
+      fullPath: '/connections'
+      preLoaderRoute: typeof ConnectionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ConnectionsRoute: ConnectionsRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   RiotRoute: RiotRoute,
 }

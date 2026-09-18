@@ -56,6 +56,58 @@ export type Database = {
         }
         Relationships: []
       }
+      connections: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          status: string
+          updated_at: string
+          user_a: string
+          user_b: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          status?: string
+          updated_at?: string
+          user_a: string
+          user_b: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          status?: string
+          updated_at?: string
+          user_a?: string
+          user_b?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connections_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "connections_user_a_fkey"
+            columns: ["user_a"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "connections_user_b_fkey"
+            columns: ["user_b"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversation_members: {
         Row: {
           conversation_id: string
@@ -110,6 +162,61 @@ export type Database = {
             columns: ["match_id"]
             isOneToOne: true
             referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      duo_games: {
+        Row: {
+          created_at: string
+          game_mode: string
+          id: string
+          note: string | null
+          recorded_by: string
+          result: string
+          user_a: string
+          user_b: string
+        }
+        Insert: {
+          created_at?: string
+          game_mode?: string
+          id?: string
+          note?: string | null
+          recorded_by: string
+          result?: string
+          user_a: string
+          user_b: string
+        }
+        Update: {
+          created_at?: string
+          game_mode?: string
+          id?: string
+          note?: string | null
+          recorded_by?: string
+          result?: string
+          user_a?: string
+          user_b?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "duo_games_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "duo_games_user_a_fkey"
+            columns: ["user_a"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "duo_games_user_b_fkey"
+            columns: ["user_b"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -343,6 +450,7 @@ export type Database = {
           created_at: string
           date_of_birth: string | null
           display_name: string
+          gender: string | null
           id: string
           is_banned: boolean
           languages: string[]
@@ -363,6 +471,7 @@ export type Database = {
           created_at?: string
           date_of_birth?: string | null
           display_name?: string
+          gender?: string | null
           id: string
           is_banned?: boolean
           languages?: string[]
@@ -383,6 +492,7 @@ export type Database = {
           created_at?: string
           date_of_birth?: string | null
           display_name?: string
+          gender?: string | null
           id?: string
           is_banned?: boolean
           languages?: string[]
@@ -576,7 +686,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_connection: {
+        Args: { _connection_id: string }
+        Returns: undefined
+      }
       block_user: { Args: { _target: string }; Returns: Json }
+      decline_connection: {
+        Args: { _connection_id: string }
+        Returns: undefined
+      }
+      duo_history: {
+        Args: { _other: string }
+        Returns: {
+          last_played_at: string
+          losses: number
+          played_together: number
+          unknown_results: number
+          wins: number
+        }[]
+      }
       get_live_candidates: {
         Args: { _limit?: number }
         Returns: {
@@ -617,6 +745,18 @@ export type Database = {
       }
       live_heartbeat: { Args: { _status?: string }; Returns: undefined }
       live_player_count: { Args: never; Returns: number }
+      my_connections: {
+        Args: never
+        Returns: {
+          connection_id: string
+          other_avatar: string
+          other_name: string
+          other_user: string
+          requested_by_me: boolean
+          status: string
+          updated_at: string
+        }[]
+      }
       my_conversations: {
         Args: never
         Returns: {
@@ -638,6 +778,19 @@ export type Database = {
         Args: { _division?: string; _tier: string }
         Returns: number
       }
+      record_duo_game: {
+        Args: {
+          _game_mode?: string
+          _note?: string
+          _other: string
+          _result?: string
+        }
+        Returns: string
+      }
+      remove_connection: {
+        Args: { _connection_id: string }
+        Returns: undefined
+      }
       report_user: {
         Args: { _details?: string; _reason: string; _target: string }
         Returns: Json
@@ -646,6 +799,7 @@ export type Database = {
         Args: { _a: string; _b: string }
         Returns: boolean
       }
+      send_connection_request: { Args: { _target: string }; Returns: string }
       start_live_session: {
         Args: {
           _game_mode: string
@@ -686,6 +840,15 @@ export type Database = {
         }
       }
       stop_live_session: { Args: never; Returns: undefined }
+      submit_rating: {
+        Args: {
+          _match_id: string
+          _rated: string
+          _tags?: string[]
+          _verdict: string
+        }
+        Returns: string
+      }
       swipe: {
         Args: { _action: string; _score?: number; _target: string }
         Returns: Json
