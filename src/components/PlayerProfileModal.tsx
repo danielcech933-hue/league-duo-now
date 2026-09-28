@@ -13,7 +13,7 @@ type Profile = {
 type Reputation = { rating_count: number; great_count: number; okay_count: number; bad_count: number; great_pct: number; reputation_score: number };
 type DuoHistory = { played_together: number; wins: number; losses: number; unknown_results: number; last_played_at: string | null };
 type RiotAccount = { game_name: string; tag_line: string; region: string; rank_tier?: string | null; rank_division?: string | null; wins?: number | null; losses?: number | null; verified?: boolean | null };
-type Props = { userId: string; name?: string; onClose: () => void; onToast?: (message: string, tone: "success" | "error") => void };
+type Props = { userId: string; name?: string; onClose: () => void; onToast?: ((message: string, tone: "success" | "error") => void) | undefined };
 
 export function PlayerProfileModal({ userId, name, onClose, onToast }: Props) {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -34,7 +34,7 @@ export function PlayerProfileModal({ userId, name, onClose, onToast }: Props) {
       setBusy(true);
       const [{ data: p, error: pe }, { data: r }, { data: connections }, { data: h, error: he }, { data: ra }] = await Promise.all([
         supabase.from("profiles").select("id,display_name,avatar_url,bio,region,languages,primary_role,secondary_role,voice,playstyle,date_of_birth,country").eq("id", userId).maybeSingle(),
-        supabase.rpc("player_reputation", { _user: userId }),
+        (supabase.rpc as any)("player_reputation", { _user: userId }),
         supabase.rpc("my_connections"),
         supabase.rpc("duo_history", { _other: userId }),
         supabase.from("riot_accounts").select("game_name,tag_line,region,rank_tier,rank_division,wins,losses,verified").eq("user_id", userId).maybeSingle(),
@@ -68,7 +68,7 @@ export function PlayerProfileModal({ userId, name, onClose, onToast }: Props) {
 
   const invite = async () => {
     setInviteBusy(true);
-    const { error: e } = await supabase.rpc("invite_duo", { _other: userId });
+    const { error: e } = await (supabase.rpc as any)("invite_duo", { _other: userId });
     setInviteBusy(false);
     if (e) { onToast?.(e.message, "error"); return; }
     onToast?.("Play Again invitation sent.", "success");

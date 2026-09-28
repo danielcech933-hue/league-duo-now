@@ -159,7 +159,8 @@ export function PlayerOrbitalSpace({ players, onSelect, onRefresh, refreshing = 
           const age = ageFromDob(p.date_of_birth);
           const country = getCountry(p.country);
           const hoveredNow = hovered === p.user_id;
-          const angle = (positions[i][0] * 1.9 + positions[i][1]) * Math.PI / 180;
+          const pos = positions[i] ?? [0, 0];
+          const angle = ((pos[0] ?? 0) * 1.9 + (pos[1] ?? 0)) * Math.PI / 180;
           const radius = 185 + (i % 3) * 16;
           const orbitX = Math.cos(angle) * radius;
           const orbitY = Math.sin(angle) * (radius * 0.68);
