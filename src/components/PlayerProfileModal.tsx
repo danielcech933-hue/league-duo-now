@@ -13,7 +13,7 @@ type Profile = {
 type Reputation = { rating_count: number; great_count: number; okay_count: number; bad_count: number; great_pct: number; reputation_score: number };
 type DuoHistory = { played_together: number; wins: number; losses: number; unknown_results: number; last_played_at: string | null };
 type RiotAccount = { game_name: string; tag_line: string; region: string; rank_tier?: string | null; rank_division?: string | null; wins?: number | null; losses?: number | null; verified?: boolean | null };
-type Props = { userId: string; name?: string; onClose: () => void; onToast?: (message: string, tone: "success" | "error") => void };
+type Props = { userId: string; name?: string; onClose: () => void; onToast?: ((message: string, tone: "success" | "error") => void) | undefined };
 
 export function PlayerProfileModal({ userId, name, onClose, onToast }: Props) {
   const [profile, setProfile] = useState<Profile | null>(null);
