@@ -34,7 +34,7 @@ export function PlayerProfileModal({ userId, name, onClose, onToast }: Props) {
       setBusy(true);
       const [{ data: p, error: pe }, { data: r }, { data: connections }, { data: h, error: he }, { data: ra }] = await Promise.all([
         supabase.from("profiles").select("id,display_name,avatar_url,bio,region,languages,primary_role,secondary_role,voice,playstyle,date_of_birth,country").eq("id", userId).maybeSingle(),
-        (supabase.rpc as any)("player_reputation", { _user: userId }),
+        supabase.rpc("player_reputation", { _user: userId }),
         supabase.rpc("my_connections"),
         supabase.rpc("duo_history", { _other: userId }),
         supabase.from("riot_accounts").select("game_name,tag_line,region,rank_tier,rank_division,wins,losses,verified").eq("user_id", userId).maybeSingle(),
@@ -68,7 +68,7 @@ export function PlayerProfileModal({ userId, name, onClose, onToast }: Props) {
 
   const invite = async () => {
     setInviteBusy(true);
-    const { error: e } = await (supabase.rpc as any)("invite_duo", { _other: userId });
+    const { error: e } = await supabase.rpc("invite_duo", { _other: userId });
     setInviteBusy(false);
     if (e) { onToast?.(e.message, "error"); return; }
     onToast?.("Play Again invitation sent.", "success");

@@ -30,7 +30,7 @@ export function ReputationCard({ userId, compact = false }: { userId: string; co
     let alive = true;
     (async () => {
       const [{ data: rows }, { data: riotRow }] = await Promise.all([
-        (supabase.rpc as any)("player_reputation", { _user: userId }),
+        supabase.rpc("player_reputation", { _user: userId }),
         supabase
           .from("riot_accounts")
           .select("game_name,tag_line,region,verified,rank_tier,rank_division,synced_at")
